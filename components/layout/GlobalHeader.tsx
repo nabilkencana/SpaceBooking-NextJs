@@ -132,10 +132,10 @@ export function GlobalHeader() {
               <button
                 type="button"
                 aria-label="Pemberitahuan"
-                className="p-2 text-[#4B5563] hover:text-[#111827] relative transition-colors rounded-full hover:bg-gray-50"
+                className="p-2 text-[#4B5563] hover:text-brand-dark relative transition-colors rounded-full hover:bg-gray-50"
               >
                 <Bell className="w-5 h-5" />
-                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#5E43F3]" />
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-purple" />
               </button>
 
               {/* Profil Pill Pengguna */}
@@ -154,13 +154,13 @@ export function GlobalHeader() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <span className="text-xs font-bold text-[#111827]">{initial}</span>
+                      <span className="text-xs font-bold text-brand-dark">{initial}</span>
                     )}
                   </div>
 
                   {/* Info Member */}
                   <div className="text-left pr-1">
-                    <span className="text-xs font-bold text-[#111827] leading-tight block max-w-[120px] truncate">
+                    <span className="text-xs font-bold text-brand-dark leading-tight block max-w-[120px] truncate">
                       {memberName}
                     </span>
                     <span className="text-[10px] text-[#6B7280] block max-w-[120px] truncate">
@@ -185,7 +185,7 @@ export function GlobalHeader() {
                         onClick={() => setProfileDropdownOpen(false)}
                         className="flex items-center gap-2 px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
                       >
-                        <UserCheck className="w-4 h-4 text-[#5E43F3]" />
+                        <UserCheck className="w-4 h-4 text-brand-purple" />
                         <span>Panel Admin</span>
                       </Link>
                     )}
@@ -219,7 +219,7 @@ export function GlobalHeader() {
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label={mobileMenuOpen ? "Tutup menu" : "Buka menu"}
-            className="text-[#111827] p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="text-brand-dark p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -238,8 +238,8 @@ export function GlobalHeader() {
                   href={item.href}
                   className={`min-h-[48px] flex items-center text-sm font-medium px-3 rounded-lg transition-colors ${
                     active
-                      ? "text-[#111827] font-semibold bg-gray-50"
-                      : "text-[#6B7280] hover:text-[#111827] hover:bg-gray-50"
+                      ? "text-brand-dark font-semibold bg-gray-50"
+                      : "text-[#6B7280] hover:text-brand-dark hover:bg-gray-50"
                   }`}
                 >
                   {item.label}
@@ -256,13 +256,13 @@ export function GlobalHeader() {
                 </span>
                 <Link
                   href="/login"
-                  className="min-h-[48px] flex items-center justify-center w-full text-center text-sm font-medium text-[#111827] border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="min-h-[48px] flex items-center justify-center w-full text-center text-sm font-medium text-brand-dark border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Masuk
                 </Link>
                 <Link
                   href="/register"
-                  className="min-h-[48px] flex items-center justify-center w-full text-center text-sm font-semibold text-white bg-[#111827] rounded-lg hover:bg-black transition-colors"
+                  className="min-h-[48px] flex items-center justify-center w-full text-center text-sm font-semibold text-white bg-brand-dark rounded-lg hover:bg-black transition-colors"
                 >
                   Daftar
                 </Link>
@@ -278,11 +278,11 @@ export function GlobalHeader() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <span className="text-sm font-bold text-[#111827]">{initial}</span>
+                      <span className="text-sm font-bold text-brand-dark">{initial}</span>
                     )}
                   </div>
                   <div className="truncate">
-                    <p className="text-xs font-bold text-[#111827] leading-tight truncate">
+                    <p className="text-xs font-bold text-brand-dark leading-tight truncate">
                       {memberName}
                     </p>
                     <p className="text-[11px] text-[#6B7280] truncate">{memberInstansi}</p>
@@ -293,7 +293,7 @@ export function GlobalHeader() {
                   {user?.role === "admin_space" && (
                     <Link
                       href="/admin/spaces"
-                      className="min-h-[48px] flex items-center px-3 text-xs font-semibold text-[#5E43F3] bg-purple-50 rounded-lg"
+                      className="min-h-[48px] flex items-center px-3 text-xs font-semibold text-brand-purple bg-purple-50 rounded-lg"
                     >
                       Panel Admin
                     </Link>

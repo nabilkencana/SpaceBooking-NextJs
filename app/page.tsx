@@ -131,17 +131,6 @@ export default function UrspaceLandingPage() {
   const startXWorkspaceRef = useRef(0);
   const scrollLeftWorkspaceRef = useRef(0);
 
-  const scrollPrevWorkspace = () => {
-    if (yellowCardsRef.current) {
-      yellowCardsRef.current.scrollBy({ left: -360, behavior: "smooth" });
-    }
-  };
-
-  const scrollNextWorkspace = () => {
-    if (yellowCardsRef.current) {
-      yellowCardsRef.current.scrollBy({ left: 360, behavior: "smooth" });
-    }
-  };
 
   const scrollToWorkspaceIndex = (index: number) => {
     if (yellowCardsRef.current) {
@@ -178,7 +167,7 @@ export default function UrspaceLandingPage() {
   };
 
   return (
-    <div className="bg-white text-neutral-900 font-sans antialiased overflow-x-hidden selection:bg-[#5E43F3] selection:text-white min-h-screen flex flex-col">
+    <div className="bg-white text-neutral-900 font-sans antialiased overflow-x-hidden selection:bg-brand-purple selection:text-white min-h-screen flex flex-col">
       {/* ─── 1. TOP STICKY NAVIGATION ────────────────────────────────────────── */}
       <GlobalHeader />
 
@@ -270,7 +259,7 @@ export default function UrspaceLandingPage() {
 
             <Link
               href="/spaces"
-              className="w-full py-4 px-6 bg-[#5E43F3] hover:bg-[#4A32D6] text-white font-semibold text-sm rounded-xl shadow-lg shadow-[#5E43F3]/25 transition-all duration-150 transform active:scale-[0.99] flex items-center justify-center gap-2"
+              className="w-full py-4 px-6 bg-brand-purple hover:bg-brand-purple-hover text-white font-semibold text-sm rounded-xl shadow-lg shadow-brand-purple/25 transition-all duration-150 transform active:scale-[0.99] flex items-center justify-center gap-2"
             >
               <span>Cari Ruang Kerja</span>
               <span>→</span>
@@ -303,7 +292,7 @@ export default function UrspaceLandingPage() {
       {/* ─── 3. WORKSPACE OPTIONS SECTION (SOLID CANARY YELLOW #FFD500) ─────────── */}
       <section
         ref={yellowSectionRef}
-        className="bg-[#FFD500] py-20 lg:py-28 scroll-mt-16 overflow-hidden"
+        className="bg-brand-yellow py-20 lg:py-28 scroll-mt-16 overflow-hidden"
         id="options"
       >
         <div className="w-full pl-6 sm:pl-8 lg:pl-[max(1.5rem,calc((100vw-80rem)/2+2rem))] xl:pl-[max(2rem,calc((100vw-80rem)/2+3rem))] pr-0">
@@ -433,7 +422,7 @@ export default function UrspaceLandingPage() {
                     <p className="mt-2 text-xs sm:text-[13px] text-neutral-600 leading-relaxed font-medium">
                       Ruang eksklusif untuk tim kecil dengan privasi maksimal dan fasilitas lengkap.
                     </p>
-                    <p className="mt-4 text-xs font-bold text-[#FF4612]">
+                    <p className="mt-4 text-xs font-bold text-brand-orange">
                       Mulai Rp 75.000 / jam
                     </p>
                   </div>
@@ -450,7 +439,7 @@ export default function UrspaceLandingPage() {
                       2–6 Orang
                     </span>
                     <Link
-                      className="text-[#111827] hover:text-[#5E43F3] inline-flex items-center gap-1 transition-colors"
+                      className="text-brand-dark hover:text-brand-purple inline-flex items-center gap-1 transition-colors"
                       href="/spaces?tipe=private_office"
                     >
                       Lihat Rincian →
@@ -534,7 +523,7 @@ export default function UrspaceLandingPage() {
                     <p className="mt-2 text-xs sm:text-[13px] text-neutral-600 leading-relaxed font-medium">
                       Meja kerja personal yang tenang dengan internet stabil dan akses fleksibel.
                     </p>
-                    <p className="mt-4 text-xs font-bold text-[#5E43F3]">
+                    <p className="mt-4 text-xs font-bold text-brand-purple">
                       Mulai Rp 20.000 / jam
                     </p>
                   </div>
@@ -551,7 +540,7 @@ export default function UrspaceLandingPage() {
                       1 Orang
                     </span>
                     <Link
-                      className="text-[#111827] hover:text-[#5E43F3] inline-flex items-center gap-1 transition-colors"
+                      className="text-brand-dark hover:text-brand-purple inline-flex items-center gap-1 transition-colors"
                       href="/spaces?tipe=desk"
                     >
                       Lihat Rincian →
@@ -667,7 +656,7 @@ export default function UrspaceLandingPage() {
                     <p className="mt-2 text-xs sm:text-[13px] text-neutral-600 leading-relaxed font-medium">
                       Ruang kedap suara dengan Smart TV & fasilitas presentasi profesional.
                     </p>
-                    <p className="mt-4 text-xs font-bold text-[#5E43F3]">
+                    <p className="mt-4 text-xs font-bold text-brand-purple">
                       Mulai Rp 100.000 / jam
                     </p>
                   </div>
@@ -684,7 +673,7 @@ export default function UrspaceLandingPage() {
                       8–12 Orang
                     </span>
                     <Link
-                      className="text-[#111827] hover:text-[#5E43F3] inline-flex items-center gap-1 transition-colors"
+                      className="text-brand-dark hover:text-brand-purple inline-flex items-center gap-1 transition-colors"
                       href="/spaces?tipe=meeting_room"
                     >
                       Lihat Rincian →
@@ -751,7 +740,7 @@ export default function UrspaceLandingPage() {
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Tersedia Hari Ini
                 </span>
                 <Link
-                  className="px-4 py-2 bg-[#5E43F3] hover:bg-[#4A32D6] text-white text-xs font-semibold rounded-lg transition-colors"
+                  className="px-4 py-2 bg-brand-purple hover:bg-brand-purple-hover text-white text-xs font-semibold rounded-lg transition-colors"
                   href="/spaces"
                 >
                   Pesan Meja Ini →
@@ -868,7 +857,7 @@ export default function UrspaceLandingPage() {
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Tersedia Hari Ini
                 </span>
                 <Link
-                  className="px-4 py-2 bg-[#5E43F3] hover:bg-[#4A32D6] text-white text-xs font-semibold rounded-lg transition-colors"
+                  className="px-4 py-2 bg-brand-purple hover:bg-brand-purple-hover text-white text-xs font-semibold rounded-lg transition-colors"
                   href="/spaces"
                 >
                   Pesan Meja Ini →
@@ -882,7 +871,7 @@ export default function UrspaceLandingPage() {
       {/* ─── 5. TYPOGRAPHIC STATEMENT SECTION (SOLID VERMILION ORANGE #FF4612) ─── */}
       <section
         ref={orangeBannerRef}
-        className="w-full bg-[#FF4612] py-24 sm:py-32 md:py-44 lg:py-52 flex items-center justify-center overflow-hidden scroll-mt-16"
+        className="w-full bg-brand-orange py-24 sm:py-32 md:py-44 lg:py-52 flex items-center justify-center overflow-hidden scroll-mt-16"
         id="community"
       >
         <span id="komunitas" className="sr-only" />
@@ -922,7 +911,7 @@ export default function UrspaceLandingPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <input
-                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3] placeholder:text-neutral-400 focus:outline-none transition-all"
+                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-brand-purple focus:ring-2 focus:ring-brand-purple placeholder:text-neutral-400 focus:outline-none transition-all"
                   placeholder="Nama Lengkap*"
                   required
                   type="text"
@@ -932,7 +921,7 @@ export default function UrspaceLandingPage() {
               </div>
               <div>
                 <input
-                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3] placeholder:text-neutral-400 focus:outline-none transition-all"
+                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-brand-purple focus:ring-2 focus:ring-brand-purple placeholder:text-neutral-400 focus:outline-none transition-all"
                   placeholder="Alamat Email*"
                   required
                   type="email"
@@ -942,7 +931,7 @@ export default function UrspaceLandingPage() {
               </div>
               <div>
                 <input
-                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3] placeholder:text-neutral-400 focus:outline-none transition-all"
+                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-brand-purple focus:ring-2 focus:ring-brand-purple placeholder:text-neutral-400 focus:outline-none transition-all"
                   placeholder="Nama Perusahaan*"
                   type="text"
                   value={formData.perusahaan}
@@ -951,7 +940,7 @@ export default function UrspaceLandingPage() {
               </div>
               <div>
                 <input
-                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3] placeholder:text-neutral-400 focus:outline-none transition-all"
+                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-brand-purple focus:ring-2 focus:ring-brand-purple placeholder:text-neutral-400 focus:outline-none transition-all"
                   placeholder="Nomor Telepon*"
                   required
                   type="tel"
@@ -961,7 +950,7 @@ export default function UrspaceLandingPage() {
               </div>
               <div>
                 <input
-                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3] placeholder:text-neutral-400 focus:outline-none transition-all"
+                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-brand-purple focus:ring-2 focus:ring-brand-purple placeholder:text-neutral-400 focus:outline-none transition-all"
                   placeholder="Pilihan Lokasi*"
                   required
                   type="text"
@@ -971,7 +960,7 @@ export default function UrspaceLandingPage() {
               </div>
               <div>
                 <input
-                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3] placeholder:text-neutral-400 focus:outline-none transition-all"
+                  className="w-full text-xs px-4 py-3.5 rounded-xl border border-gray-200 focus:border-brand-purple focus:ring-2 focus:ring-brand-purple placeholder:text-neutral-400 focus:outline-none transition-all"
                   placeholder="Jumlah Anggota Tim*"
                   type="text"
                   value={formData.anggota}
@@ -986,7 +975,7 @@ export default function UrspaceLandingPage() {
             </p>
             <div className="pt-2">
               <button
-                className="w-full py-4 bg-[#5E43F3] hover:bg-[#4A32D6] text-white text-xs font-bold rounded-xl shadow-lg shadow-[#5E43F3]/25 transition duration-150 disabled:opacity-50"
+                className="w-full py-4 bg-brand-purple hover:bg-brand-purple-hover text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-purple/25 transition duration-150 disabled:opacity-50"
                 type="submit"
                 disabled={isSubmittingConsultation}
               >
@@ -1064,7 +1053,7 @@ export default function UrspaceLandingPage() {
             />
           </div>
           {/* Column 4: Tell us your story Purple Card */}
-          <div className="w-full h-72 sm:h-80 md:h-96 bg-[#5E43F3] p-8 sm:p-10 flex flex-col justify-between text-white relative">
+          <div className="w-full h-72 sm:h-80 md:h-96 bg-brand-purple p-8 sm:p-10 flex flex-col justify-between text-white relative">
             <h4 className="text-3xl sm:text-4xl font-bold leading-[1.15] text-white tracking-tight pt-2 font-display">
               Bagikan
               <br />
