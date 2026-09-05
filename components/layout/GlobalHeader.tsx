@@ -74,7 +74,7 @@ export function GlobalHeader() {
     <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-[#E5E7EB]">
       <nav
         aria-label="Navigasi Utama"
-        className="h-[72px] max-w-7xl mx-auto px-6 sm:px-8 flex items-center justify-between"
+        className="h-18 max-w-7xl mx-auto px-6 sm:px-8 flex items-center justify-between"
       >
         {/* ─── ZONE 1: SISI KIRI (LOGO IDENTITAS MEREK) ────────────────────────── */}
         <Link
@@ -94,7 +94,7 @@ export function GlobalHeader() {
                 href={item.href}
                 className={
                   active
-                    ? "text-[#0F172A] font-semibold relative py-2 after:content-[''] after:absolute after:bottom-[-24px] after:left-0 after:w-full after:h-[2px] after:bg-[#0F172A]"
+                    ? "text-[#0F172A] font-semibold relative py-2 after:content-[''] after:absolute after:-bottom-6 after:left-0 after:w-full after:h-0.5 after:bg-[#0F172A]"
                     : "text-[#64748B] hover:text-[#0F172A] transition-colors py-2 font-normal"
                 }
               >
@@ -146,7 +146,7 @@ export function GlobalHeader() {
                   className="flex items-center gap-3 pl-3 pr-2 py-1 rounded-full border border-[#E5E7EB] hover:border-gray-300 transition-all bg-white"
                 >
                   {/* Foto Avatar 34x34px */}
-                  <div className="w-[34px] h-[34px] rounded-full overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center shrink-0">
+                  <div className="w-8.5 h-8.5 rounded-full overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center shrink-0">
                     {memberPhoto ? (
                       <img
                         src={memberPhoto}
@@ -160,10 +160,10 @@ export function GlobalHeader() {
 
                   {/* Info Member */}
                   <div className="text-left pr-1">
-                    <span className="text-xs font-bold text-brand-dark leading-tight block max-w-[120px] truncate">
+                    <span className="text-xs font-bold text-brand-dark leading-tight block max-w-30 truncate">
                       {memberName}
                     </span>
-                    <span className="text-[10px] text-[#6B7280] block max-w-[120px] truncate">
+                    <span className="text-[10px] text-[#6B7280] block max-w-30 truncate">
                       {memberInstansi}
                     </span>
                   </div>
@@ -236,7 +236,7 @@ export function GlobalHeader() {
                 <Link
                   key={item.label}
                   href={item.href}
-                  className={`min-h-[48px] flex items-center text-sm font-medium px-3 rounded-lg transition-colors ${
+                  className={`min-h-12 flex items-center text-sm font-medium px-3 rounded-lg transition-colors ${
                     active
                       ? "text-brand-dark font-semibold bg-gray-50"
                       : "text-[#6B7280] hover:text-brand-dark hover:bg-gray-50"
@@ -256,13 +256,13 @@ export function GlobalHeader() {
                 </span>
                 <Link
                   href="/login"
-                  className="min-h-[48px] flex items-center justify-center w-full text-center text-sm font-medium text-brand-dark border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="min-h-12 flex items-center justify-center w-full text-center text-sm font-medium text-brand-dark border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Masuk
                 </Link>
                 <Link
                   href="/register"
-                  className="min-h-[48px] flex items-center justify-center w-full text-center text-sm font-semibold text-white bg-brand-dark rounded-lg hover:bg-black transition-colors"
+                  className="min-h-12 flex items-center justify-center w-full text-center text-sm font-semibold text-white bg-brand-dark rounded-lg hover:bg-black transition-colors"
                 >
                   Daftar
                 </Link>
@@ -293,7 +293,7 @@ export function GlobalHeader() {
                   {user?.role === "admin_space" && (
                     <Link
                       href="/admin/spaces"
-                      className="min-h-[48px] flex items-center px-3 text-xs font-semibold text-brand-purple bg-purple-50 rounded-lg"
+                      className="min-h-12 flex items-center px-3 text-xs font-semibold text-brand-purple bg-purple-50 rounded-lg"
                     >
                       Panel Admin
                     </Link>
@@ -301,7 +301,7 @@ export function GlobalHeader() {
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="min-h-[48px] flex items-center justify-center w-full text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                    className="min-h-12 flex items-center justify-center w-full text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
                   >
                     Keluar dari Akun
                   </button>

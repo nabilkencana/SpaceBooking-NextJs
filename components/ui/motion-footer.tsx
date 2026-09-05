@@ -222,7 +222,7 @@ const MarqueeItem = ({ items }: { items?: string[] }) => {
           <span className="text-[#4B5563] font-bold text-xs sm:text-sm tracking-[0.28em]">
             {item}
           </span>
-          <span className="text-[#5E43F3] text-sm">✦</span>
+          <span className="text-brand-purple text-sm">✦</span>
         </React.Fragment>
       ))}
     </div>
@@ -324,7 +324,7 @@ export function CinematicFooter({
         style={{ clipPath: "polygon(0% 0, 100% 0%, 100% 100%, 0 100%)" }}
       >
         {/* The actual footer stays fixed to the viewport underneath everything in White Light Theme */}
-        <footer className="fixed bottom-0 left-0 flex h-screen w-full flex-col justify-between overflow-hidden bg-[#FAFAFA] text-[#111827] cinematic-footer-wrapper border-t border-[#E5E7EB]">
+        <footer className="fixed bottom-0 left-0 flex h-screen w-full flex-col justify-between overflow-hidden bg-[#FAFAFA] text-brand-dark cinematic-footer-wrapper border-t border-[#E5E7EB]">
           
           {/* Ambient Light & Urspace Color Aurora Glow */}
           <div className="footer-aurora absolute left-1/2 top-1/2 h-[65vh] w-[85vw] -translate-x-1/2 -translate-y-1/2 animate-footer-breathe rounded-[50%] blur-[90px] pointer-events-none z-0" />
@@ -333,7 +333,7 @@ export function CinematicFooter({
           {/* Giant background text (Outline Watermark) */}
           <div
             ref={giantTextRef}
-            className="footer-giant-bg-text absolute -bottom-[4vh] left-1/2 -translate-x-1/2 whitespace-nowrap z-0 pointer-events-none select-none"
+            className="footer-giant-bg-text absolute bottom-[-4vh] left-1/2 -translate-x-1/2 whitespace-nowrap z-0 pointer-events-none select-none"
           >
             {giantText}
           </div>
@@ -362,19 +362,19 @@ export function CinematicFooter({
                 <MagneticButton
                   as={Link}
                   href={primaryButtonHref}
-                  className="footer-glass-pill px-8 sm:px-10 py-4.5 sm:py-5 rounded-full text-[#111827] font-bold text-sm md:text-base flex items-center gap-3 group"
+                  className="footer-glass-pill px-8 sm:px-10 py-4.5 sm:py-5 rounded-full text-brand-dark font-bold text-sm md:text-base flex items-center gap-3 group"
                 >
-                  <Compass className="w-5 h-5 text-[#5E43F3] group-hover:rotate-45 transition-transform duration-300" />
+                  <Compass className="w-5 h-5 text-brand-purple group-hover:rotate-45 transition-transform duration-300" />
                   <span>{primaryButtonText}</span>
-                  <ArrowRight className="w-4 h-4 text-[#9CA3AF] group-hover:translate-x-1 group-hover:text-[#5E43F3] transition-all" />
+                  <ArrowRight className="w-4 h-4 text-[#9CA3AF] group-hover:translate-x-1 group-hover:text-brand-purple transition-all" />
                 </MagneticButton>
                 
                 <MagneticButton
                   as={Link}
                   href={secondaryButtonHref}
-                  className="footer-glass-pill px-8 sm:px-10 py-4.5 sm:py-5 rounded-full text-[#111827] font-bold text-sm md:text-base flex items-center gap-3 group"
+                  className="footer-glass-pill px-8 sm:px-10 py-4.5 sm:py-5 rounded-full text-brand-dark font-bold text-sm md:text-base flex items-center gap-3 group"
                 >
-                  <Users className="w-5 h-5 text-[#5E43F3] group-hover:scale-110 transition-transform duration-300" />
+                  <Users className="w-5 h-5 text-brand-purple group-hover:scale-110 transition-transform duration-300" />
                   <span>{secondaryButtonText}</span>
                 </MagneticButton>
               </div>
@@ -384,21 +384,21 @@ export function CinematicFooter({
                 <MagneticButton
                   as={Link}
                   href="/spaces"
-                  className="footer-glass-pill px-6 py-3 rounded-full text-[#4B5563] font-medium text-xs md:text-sm hover:text-[#5E43F3]"
+                  className="footer-glass-pill px-6 py-3 rounded-full text-[#4B5563] font-medium text-xs md:text-sm hover:text-brand-purple"
                 >
                   Pilihan Ruang
                 </MagneticButton>
                 <MagneticButton
                   as={Link}
                   href="/#ruang-sekitar"
-                  className="footer-glass-pill px-6 py-3 rounded-full text-[#4B5563] font-medium text-xs md:text-sm hover:text-[#5E43F3]"
+                  className="footer-glass-pill px-6 py-3 rounded-full text-[#4B5563] font-medium text-xs md:text-sm hover:text-brand-purple"
                 >
                   Workstation Terdekat
                 </MagneticButton>
                 <MagneticButton
                   as="a"
                   href="mailto:hello@homa.app"
-                  className="footer-glass-pill px-6 py-3 rounded-full text-[#4B5563] font-medium text-xs md:text-sm hover:text-[#5E43F3]"
+                  className="footer-glass-pill px-6 py-3 rounded-full text-[#4B5563] font-medium text-xs md:text-sm hover:text-brand-purple"
                 >
                   Pusat Bantuan & Kontak
                 </MagneticButton>
@@ -417,9 +417,9 @@ export function CinematicFooter({
             {/* "Crafted with Love" Badge */}
             <div className="footer-glass-pill px-6 py-3 rounded-full flex items-center gap-2 order-1 md:order-2 cursor-default border-[#E5E7EB]">
               <span className="text-[#6B7280] text-[10px] md:text-xs font-bold uppercase tracking-widest">Dirancang dengan</span>
-              <span className="animate-footer-heartbeat text-sm md:text-base text-[#FF4612]">❤</span>
+              <span className="animate-footer-heartbeat text-sm md:text-base text-brand-orange">❤</span>
               <span className="text-[#6B7280] text-[10px] md:text-xs font-bold uppercase tracking-widest">oleh</span>
-              <span className="text-[#111827] font-black text-xs md:text-sm tracking-normal ml-1">{creatorName}</span>
+              <span className="text-brand-dark font-black text-xs md:text-sm tracking-normal ml-1">{creatorName}</span>
             </div>
 
             {/* Back to top */}
@@ -427,7 +427,7 @@ export function CinematicFooter({
               as="button"
               onClick={scrollToTop}
               aria-label="Kembali ke atas"
-              className="w-12 h-12 rounded-full footer-glass-pill flex items-center justify-center text-[#4B5563] hover:text-[#5E43F3] group order-3 shadow-xs"
+              className="w-12 h-12 rounded-full footer-glass-pill flex items-center justify-center text-[#4B5563] hover:text-brand-purple group order-3 shadow-xs"
             >
               <svg className="w-5 h-5 transform group-hover:-translate-y-1.5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>

@@ -7,7 +7,14 @@ const ROLE_COOKIE = "sb_role";
 const MEMBER_HOME = "/reservasi";
 const ADMIN_HOME = "/admin/dashboard";
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/register", "/spaces"]);
+const PUBLIC_PATHS = new Set([
+  "/",
+  "/login",
+  "/register",
+  "/spaces",
+  "/auth/login",
+  "/auth/register",
+]);
 
 function isPublic(path: string): boolean {
   if (PUBLIC_PATHS.has(path)) return true;

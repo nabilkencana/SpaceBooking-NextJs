@@ -19,7 +19,7 @@ export function GlobalFooter() {
   return (
     <footer className="w-full bg-white pt-10 sm:pt-14 md:pt-18 pb-0 overflow-hidden border-t border-[#E5E7EB] mt-0">
       {/* ─── MAIN FOOTER CONTENT WRAPPER ──────────────────────────────────── */}
-      <div className="max-w-[1400px] mx-auto px-6 sm:px-10 lg:px-14">
+      <div className="max-w-350 mx-auto px-6 sm:px-10 lg:px-14">
         {/* ─── TIER 1: WORDMARK URSPACE & 3-COLUMN NAVIGATION ROW ──────────── */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10 pb-16 md:pb-24">
           {/* Sisi Kiri: Wordmark Urspace yang Proporsional & Huruf 'p' Tidak Terpotong */}

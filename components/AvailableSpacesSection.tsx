@@ -1,8 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import AutoLayoutSpaceCard, { SpaceData } from '@/components/ui/auto-layout-space-card';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 const availableSpacesData: SpaceData[] = [
   {
@@ -76,8 +82,33 @@ const availableSpacesData: SpaceData[] = [
 ];
 
 export function AvailableSpacesSection() {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof window === 'undefined') return;
+
+    let timer: NodeJS.Timeout;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const lenis = (window as unknown as { lenisInstance?: { resize: () => void } }).lenisInstance;
+        if (lenis) lenis.resize();
+        ScrollTrigger.refresh();
+      }, 50);
+    });
+
+    ro.observe(el);
+
+    return () => {
+      clearTimeout(timer);
+      ro.disconnect();
+    };
+  }, []);
+
   return (
     <section
+      ref={sectionRef}
       id="ruang-sekitar"
       className="relative z-10 bg-white py-24 px-6 sm:px-8 border-t border-[#E5E7EB] scroll-mt-16"
     >

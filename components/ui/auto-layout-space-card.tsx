@@ -5,6 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Wifi, Users, MapPin, Zap, ArrowRight, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 export type Step = 1 | 2 | 3;
 
@@ -97,9 +103,25 @@ export const AutoLayoutSpaceCard = React.forwardRef<HTMLDivElement, AutoLayoutSp
   ({ space, className }, ref) => {
     const [step, setStep] = useState<Step>(1);
 
+    // Sinkronisasi posisi trigger GSAP dan batas scroll Lenis saat kartu melebar atau menyusut
+    const syncScroll = () => {
+      if (typeof window !== 'undefined') {
+        const lenis = (window as unknown as { lenisInstance?: { resize: () => void } }).lenisInstance;
+        if (lenis) lenis.resize();
+        ScrollTrigger.refresh();
+      }
+    };
+
     const handleStepCycle = (e: React.MouseEvent) => {
       if ((e.target as HTMLElement).closest('a, button')) return;
       setStep((prev) => ((prev % 3) + 1) as Step);
+
+      syncScroll();
+      setTimeout(syncScroll, 60);
+      setTimeout(syncScroll, 150);
+      setTimeout(syncScroll, 300);
+      setTimeout(syncScroll, 500);
+      setTimeout(syncScroll, 800);
     };
 
     return (
@@ -107,6 +129,7 @@ export const AutoLayoutSpaceCard = React.forwardRef<HTMLDivElement, AutoLayoutSp
         ref={ref}
         layout
         onClick={handleStepCycle}
+        onLayoutAnimationComplete={syncScroll}
         transition={transitionSpring}
         className={cn(
           'group relative cursor-pointer overflow-hidden rounded-3xl bg-white p-5 border border-[#E5E7EB] select-none will-change-transform transition-shadow duration-300',
@@ -231,24 +254,28 @@ export const AutoLayoutSpaceCard = React.forwardRef<HTMLDivElement, AutoLayoutSp
                 initial="hidden"
                 animate="visible"
                 exit="exit"
+                onAnimationComplete={syncScroll}
                 className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-center gap-3 pb-1"
               >
                 <motion.img
                   variants={galleryItemVariants}
                   src={space.galleryImages[0]}
                   alt="Sudut Meja 1"
+                  onLoad={syncScroll}
                   className="w-24 h-28 object-cover rounded-xl shadow-md border border-gray-100 -rotate-3 transition-transform hover:rotate-0 duration-300"
                 />
                 <motion.img
                   variants={galleryItemVariants}
                   src={space.galleryImages[1]}
                   alt="Sudut Meja 2"
+                  onLoad={syncScroll}
                   className="w-28 h-32 object-cover rounded-xl shadow-lg border border-gray-100 z-10 transition-transform hover:scale-105 duration-300"
                 />
                 <motion.img
                   variants={galleryItemVariants}
                   src={space.galleryImages[2]}
                   alt="Sudut Meja 3"
+                  onLoad={syncScroll}
                   className="w-24 h-28 object-cover rounded-xl shadow-md border border-gray-100 rotate-3 transition-transform hover:rotate-0 duration-300"
                 />
               </motion.div>

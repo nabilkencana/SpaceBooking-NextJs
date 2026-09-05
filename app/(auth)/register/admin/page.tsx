@@ -67,121 +67,126 @@ export default function AdminRegisterPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h1 className="text-lg font-semibold">Daftar Admin Space</h1>
-        <p className="text-sm text-muted-foreground">
-          Daftarkan coworking space Anda
+    <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-indigo-50 via-white to-amber-50 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="text-center mb-6">
+          <Link href="/" className="text-xl font-bold text-primary inline-block mb-4">
+            Smart Space Booking
+          </Link>
+          <h1 className="text-lg font-semibold text-gray-900">Daftar Admin Space</h1>
+          <p className="text-sm text-gray-500">
+            Daftarkan coworking space Anda
+          </p>
+        </div>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="username"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Username</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Masukkan username"
+                      autoComplete="username"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      placeholder="Masukkan password"
+                      autoComplete="new-password"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="nama_coworking"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nama Coworking Space</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Masukkan nama coworking space"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="nama_pemilik"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nama Pemilik</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Masukkan nama pemilik" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="telp"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nomor Telepon</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="08xxxxxxxxxx"
+                      autoComplete="tel"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Memproses..." : "Daftar Admin Space"}
+            </Button>
+          </form>
+        </Form>
+
+        <p className="text-center text-sm text-muted-foreground mt-4">
+          Sudah punya akun?{" "}
+          <Link
+            href="/login"
+            className="font-medium text-primary hover:underline"
+          >
+            Masuk
+          </Link>
         </p>
       </div>
-
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="username"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Username</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Masukkan username"
-                    autoComplete="username"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <Input
-                    type="password"
-                    placeholder="Masukkan password"
-                    autoComplete="new-password"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="nama_coworking"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nama Coworking Space</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Masukkan nama coworking space"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="nama_pemilik"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nama Pemilik</FormLabel>
-                <FormControl>
-                  <Input placeholder="Masukkan nama pemilik" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="telp"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nomor Telepon</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="08xxxxxxxxxx"
-                    autoComplete="tel"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Memproses..." : "Daftar Admin Space"}
-          </Button>
-        </form>
-      </Form>
-
-      <p className="text-center text-sm text-muted-foreground">
-        Sudah punya akun?{" "}
-        <Link
-          href="/login"
-          className="font-medium text-primary hover:underline"
-        >
-          Masuk
-        </Link>
-      </p>
     </div>
   );
 }

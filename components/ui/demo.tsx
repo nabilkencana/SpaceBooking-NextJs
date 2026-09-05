@@ -17,7 +17,7 @@ export default function Demo() {
           Scroll down to reveal
         </h1>
         
-        <div className="w-[1px] h-32 bg-gradient-to-b from-neutral-400 to-transparent" />
+        <div className="w-px h-32 bg-linear-to-b from-neutral-400 to-transparent" />
       </main>
 
       {/* The Cinematic Footer is injected here */}

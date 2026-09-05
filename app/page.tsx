@@ -12,6 +12,7 @@ import { WorkspaceOptionsSection } from "@/components/WorkspaceOptionsSection";
 import { AvailableSpacesSection } from "@/components/AvailableSpacesSection";
 import { CommunityConsultationCurtain } from "@/components/CommunityConsultationCurtain";
 import { SplitText } from "@/components/ui/SplitText";
+import { SmoothScroll } from "@/components/ui/SmoothScroll";
 
 gsap.registerPlugin(ScrollTrigger);
 gsap.config({ nullTargetWarn: false });
@@ -172,6 +173,7 @@ export default function UrspaceLandingPage() {
 
   return (
     <div className="bg-white text-neutral-900 font-sans antialiased overflow-x-hidden selection:bg-brand-purple selection:text-white min-h-screen flex flex-col">
+      <SmoothScroll />
       {/* ─── MAIN CONTENT LAYER (ELEVATED Z-10 WITH BOTTOM SHADOW FOR CURTAIN REVEAL) ─── */}
       <div className="relative z-10 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.12)]">
         {/* ─── 1. TOP STICKY NAVIGATION ────────────────────────────────────────── */}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -24,39 +24,35 @@ export function CommunityConsultationCurtain() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const useIsomorphicLayoutEffect =
-    typeof window !== "undefined" ? React.useLayoutEffect : React.useEffect;
-
-  useIsomorphicLayoutEffect(() => {
+  useEffect(() => {
     const orange = orangeSectionRef.current;
     const form = formSectionRef.current;
+    const container = containerRef.current;
 
-    if (!orange || !form) return;
+    if (!orange || !form || !container) return;
 
     const ctx = gsap.context(() => {
       const mm = gsap.matchMedia();
 
       mm.add("(min-width: 768px)", () => {
-        // Kunci seksi oranye di posisi top: 0 saat masuk viewport
-        // Gunakan endTrigger seksi formulir agar seksi oranye tetap terkunci sampai formulir menutupinya penuh
+        // Kunci seksi oranye di posisi top: 0 saat masuk viewport dengan fungsi dinamis
         ScrollTrigger.create({
           trigger: orange,
-          start: "top top",
+          start: () => "top top",
           endTrigger: form,
-          end: "top top",
+          end: () => "top top",
           pin: true,
-          pinSpacing: false, // Kunci utama agar seksi formulir di bawahnya naik menimpa seksi oranye
+          pinSpacing: false, // Tirai: formulir konsultasi meluncur naik menumpuk seksi oranye
           anticipatePin: 1,
           invalidateOnRefresh: true,
         });
       });
     }, containerRef);
 
-    // Sinkronisasi urutan trigger dengan seksi kuning sebelumnya setelah DOM siap
     const timer = setTimeout(() => {
       ScrollTrigger.sort();
       ScrollTrigger.refresh();
-    }, 250);
+    }, 120);
 
     return () => {
       clearTimeout(timer);
@@ -86,7 +82,7 @@ export function CommunityConsultationCurtain() {
 
   return (
     <div ref={containerRef} className="relative w-full clear-both bg-white">
-      {/* SEKSI 5: KOMUNITAS (Z-10, DIKUNCI DI VIEWPORT OLEH GSAP DENGAN pinSpacing: false) */}
+      {/* SEKSI 5: KOMUNITAS (Z-10, DIKUNCI DI VIEWPORT OLEH GSAP DENGAN pinSpacing: false SEPERTI TIRAI) */}
       <section
         ref={orangeSectionRef}
         id="community"
