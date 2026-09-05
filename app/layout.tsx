@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="id"
-      className={`${plusJakartaSans.variable} ${syne.variable} scroll-smooth antialiased`}
+      className={`${plusJakartaSans.variable} ${syne.variable} antialiased`}
     >
       <body>
         <Providers>{children}</Providers>

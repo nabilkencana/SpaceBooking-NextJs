@@ -2,11 +2,14 @@
 
 import { AuthProvider } from "@/contexts/AuthContext";
 import { QueryProvider } from "@/app/query-provider";
+import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryProvider>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <SmoothScrollProvider>{children}</SmoothScrollProvider>
+      </AuthProvider>
     </QueryProvider>
   );
 }

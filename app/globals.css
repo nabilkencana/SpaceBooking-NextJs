@@ -159,10 +159,17 @@
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+    overflow-y: auto !important;
+  }
+  body {
+    @apply bg-background text-foreground;
+    overflow-x: hidden;
+    overflow-y: visible !important;
+    min-height: 100vh;
+    position: relative;
   }
 }
