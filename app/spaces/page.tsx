@@ -2,20 +2,22 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   Search,
   Calendar,
   Clock,
   ChevronDown,
-  Bell,
   Users,
   Wifi,
   Maximize2,
   Check,
   ArrowDown,
 } from "lucide-react";
-import { catalogSpaces } from "@/lib/dummy-catalog";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api-client";
+import { unwrapApi } from "@/lib/api";
+import { useSpacesQuery } from "@/hooks/useSpaces";
+import { SPACE_TYPE_LABELS, type SpaceType } from "@/types";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
 import MotionFooter from "@/components/ui/motion-footer";
 import { SmoothScroll } from "@/components/ui/SmoothScroll";
@@ -27,11 +29,31 @@ const SORT_OPTIONS = [
   "Kapasitas Terbesar",
 ];
 
+// Label aksi per tipe space (pengganti ctaText dari data dummy)
+const CTA_LABELS: Record<SpaceType, string> = {
+  desk: "Pesan Meja Ini →",
+  meeting_room: "Reservasi Ruang →",
+  private_office: "Pesan Kantor Privat →",
+  focus_pod: "Cek Jadwal Lain →",
+};
+
+interface SpaceTypeOption {
+  tipe: SpaceType;
+  label: string;
+}
+
 export default function SpacesDirectoryPage() {
-  const [lokasiQuery, setLokasiQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedType, setSelectedType] = useState("");
   const [selectedSort, setSelectedSort] = useState("Rekomendasi");
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Bar filter sewa: default hari ini, 09:00, 3 jam — dikirim sebagai query params ke halaman detail
+  const [tanggal, setTanggal] = useState(() => new Date().toLocaleDateString("en-CA"));
+  const [jamMulai, setJamMulai] = useState("09:00");
+  const [durasi, setDurasi] = useState(3);
 
   // Two-stage smooth scroll state
   const [isAtBottom, setIsAtBottom] = useState(false);
@@ -51,30 +73,56 @@ export default function SpacesDirectoryPage() {
   const canTriggerSecondScrollRef = useRef(false);
   const wheelIdleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Filter & Sort Logic
-  const filteredAndSortedSpaces = useMemo(() => {
-    let list = [...catalogSpaces];
+  // Debounce 300ms untuk input pencarian → ?search=
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-    if (lokasiQuery.trim()) {
-      const q = lokasiQuery.toLowerCase();
-      list = list.filter(
-        (item) =>
-          item.nama.toLowerCase().includes(q) ||
-          item.lokasi.toLowerCase().includes(q) ||
-          item.tipe.toLowerCase().includes(q)
-      );
-    }
+  // Reset ke halaman 1 saat filter berubah
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedType]);
 
+  // Daftar tipe space dari GET /spaces/types (diambil sekali; fallback statis saat gagal)
+  const typeOptionsQuery = useQuery({
+    queryKey: ["spaces", "types"],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/spaces/types");
+      return unwrapApi<SpaceTypeOption[]>({ data });
+    },
+    staleTime: Infinity,
+  });
+  const typeOptions: SpaceTypeOption[] =
+    typeOptionsQuery.data ??
+    (Object.entries(SPACE_TYPE_LABELS) as [SpaceType, string][]).map(
+      ([tipe, label]) => ({ tipe, label })
+    );
+
+  // Live catalog: useSpacesQuery menormalkan bentuk paginated/flat
+  // (backend belum punya param sort — urut di sisi klien pada halaman aktif, fallback yang disanksi rencana)
+  const spacesQuery = useSpacesQuery({
+    search: debouncedSearch || undefined,
+    type: selectedType || undefined,
+    page: currentPage,
+    per_page: 6,
+  });
+  const { data: spacesData, isPending, isError, refetch } = spacesQuery;
+  const items = spacesData?.items ?? [];
+  const meta = spacesData?.meta;
+
+  const sortedItems = useMemo(() => {
     if (selectedSort === "Harga: Terendah ke Tertinggi") {
-      list.sort((a, b) => a.hargaPerJam - b.hargaPerJam);
-    } else if (selectedSort === "Harga: Tertinggi ke Terendah") {
-      list.sort((a, b) => b.hargaPerJam - a.hargaPerJam);
-    } else if (selectedSort === "Kapasitas Terbesar") {
-      list.sort((a, b) => b.kapasitas - a.kapasitas);
+      return [...items].sort((a, b) => a.harga_per_jam - b.harga_per_jam);
     }
-
-    return list;
-  }, [lokasiQuery, selectedSort]);
+    if (selectedSort === "Harga: Tertinggi ke Terendah") {
+      return [...items].sort((a, b) => b.harga_per_jam - a.harga_per_jam);
+    }
+    if (selectedSort === "Kapasitas Terbesar") {
+      return [...items].sort((a, b) => b.kapasitas - a.kapasitas);
+    }
+    return items;
+  }, [items, selectedSort]);
 
   // Hitung posisi mentok direktori space (di mana pagination terlihat penuh di viewport)
   const getDirectoryStopPosition = () => {
@@ -245,7 +293,7 @@ export default function SpacesDirectoryPage() {
           {/* ─── FLOATING SEARCH & FILTER BAR ──────────────────────────────── */}
           <div className="w-full bg-white rounded-2xl border border-[#E5E7EB] shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-2.5 sm:p-3 mb-10">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
-              {/* Input Lokasi / Fasilitas */}
+              {/* Input Pencarian Space */}
               <div className="md:col-span-4 flex items-center gap-3 px-4 py-2 border-b md:border-b-0 md:border-r border-gray-100">
                 <Search className="w-4 h-4 text-gray-400 shrink-0" />
                 <div className="w-full">
@@ -253,14 +301,14 @@ export default function SpacesDirectoryPage() {
                     htmlFor="filter-lokasi"
                     className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider cursor-pointer"
                   >
-                    LOKASI / FASILITAS
+                    CARI RUANG KERJA
                   </label>
                   <input
                     id="filter-lokasi"
                     type="text"
-                    placeholder="Cari area, kota, atau nama gedung..."
-                    value={lokasiQuery}
-                    onChange={(e) => setLokasiQuery(e.target.value)}
+                    placeholder="Cari nama ruang kerja..."
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
                     className="w-full text-xs font-semibold text-gray-800 placeholder:text-gray-300 focus:outline-none bg-transparent pt-0.5"
                   />
                 </div>
@@ -274,9 +322,14 @@ export default function SpacesDirectoryPage() {
                     <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                       TANGGAL SEWA
                     </span>
-                    <span className="text-xs font-semibold text-gray-800 pt-0.5 block">
-                      30/08/2026
-                    </span>
+                    <input
+                      type="date"
+                      aria-label="Tanggal sewa"
+                      value={tanggal}
+                      onChange={(e) => setTanggal(e.target.value)}
+                      suppressHydrationWarning
+                      className="text-xs font-semibold text-gray-800 pt-0.5 block bg-transparent focus:outline-none cursor-pointer"
+                    />
                   </div>
                 </div>
                 <Calendar className="w-3.5 h-3.5 text-gray-300 shrink-0 pointer-events-none" />
@@ -292,12 +345,29 @@ export default function SpacesDirectoryPage() {
                     </span>
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-800 pt-0.5">
                       <span className="flex items-center gap-0.5">
-                        09:00 WIB
+                        <input
+                          type="time"
+                          aria-label="Jam mulai"
+                          value={jamMulai}
+                          onChange={(e) => setJamMulai(e.target.value)}
+                          className="bg-transparent focus:outline-none text-xs font-semibold text-gray-800 cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                        />
                         <ChevronDown className="w-3 h-3 text-gray-400" />
                       </span>
                       <span className="text-gray-300">•</span>
                       <span className="flex items-center gap-0.5">
-                        3 Jam
+                        <select
+                          aria-label="Durasi sewa"
+                          value={durasi}
+                          onChange={(e) => setDurasi(Number(e.target.value))}
+                          className="appearance-none bg-transparent focus:outline-none text-xs font-semibold text-gray-800 cursor-pointer"
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => (
+                            <option key={h} value={h}>
+                              {h} Jam
+                            </option>
+                          ))}
+                        </select>
                         <ChevronDown className="w-3 h-3 text-gray-400" />
                       </span>
                     </div>
@@ -309,7 +379,7 @@ export default function SpacesDirectoryPage() {
               <div className="md:col-span-2">
                 <button
                   type="button"
-                  onClick={() => {}}
+                  onClick={() => refetch()}
                   className="w-full bg-[#5E43F3] hover:bg-[#4A32D6] text-white text-xs font-semibold py-3.5 px-4 rounded-xl shadow-sm transition-all duration-150 active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>Cek Ketersediaan</span>
@@ -318,8 +388,37 @@ export default function SpacesDirectoryPage() {
             </div>
           </div>
 
-          {/* ─── SORTING BAR ───────────────────────────────────────────────── */}
-          <div className="flex items-center justify-end mb-6 text-xs text-gray-500 relative">
+          {/* ─── TYPE FILTER + SORTING BAR ─────────────────────────────────── */}
+          <div className="flex items-center justify-between gap-4 mb-6 text-xs text-gray-500 relative flex-wrap">
+            {/* Filter Tipe Space */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setSelectedType("")}
+                className={`px-3.5 py-1.5 rounded-full border text-[11px] font-semibold transition-colors cursor-pointer ${
+                  selectedType === ""
+                    ? "bg-[#5E43F3] border-[#5E43F3] text-white"
+                    : "bg-white border-[#E5E7EB] text-gray-600 hover:border-[#5E43F3] hover:text-[#5E43F3]"
+                }`}
+              >
+                Semua Tipe
+              </button>
+              {typeOptions.map((opt) => (
+                <button
+                  key={opt.tipe}
+                  type="button"
+                  onClick={() => setSelectedType(opt.tipe)}
+                  className={`px-3.5 py-1.5 rounded-full border text-[11px] font-semibold transition-colors cursor-pointer ${
+                    selectedType === opt.tipe
+                      ? "bg-[#5E43F3] border-[#5E43F3] text-white"
+                      : "bg-white border-[#E5E7EB] text-gray-600 hover:border-[#5E43F3] hover:text-[#5E43F3]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
             <div className="relative">
               <button
                 type="button"
@@ -364,13 +463,55 @@ export default function SpacesDirectoryPage() {
           </div>
 
           {/* ─── 3-COLUMN WORKSPACE GRID ───────────────────────────────────── */}
-          {filteredAndSortedSpaces.length === 0 ? (
+          {isPending ? (
+            /* Loading skeleton: 6 kartu */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="bg-white rounded-3xl border border-[#E5E7EB] p-4 animate-pulse"
+                >
+                  <div className="w-full h-52 rounded-2xl bg-gray-100 mb-4" />
+                  <div className="flex items-baseline justify-between pb-3 border-b border-gray-100">
+                    <div className="h-4 w-28 bg-gray-100 rounded" />
+                    <div className="h-3 w-24 bg-gray-100 rounded" />
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <div className="h-4 w-3/4 bg-gray-100 rounded" />
+                    <div className="h-3 w-1/2 bg-gray-100 rounded" />
+                  </div>
+                  <div className="pt-5 mt-4 border-t border-gray-100 flex justify-end">
+                    <div className="h-3 w-24 bg-gray-100 rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : isError ? (
+            /* Error state dengan retry */
+            <div className="w-full py-20 text-center bg-red-50/50 rounded-3xl border border-dashed border-red-200">
+              <p className="text-sm font-semibold text-red-600">
+                Gagal memuat daftar ruang kerja. Periksa koneksi Anda dan coba lagi.
+              </p>
+              <button
+                onClick={() => refetch()}
+                className="mt-3 text-xs font-bold text-[#5E43F3] hover:underline cursor-pointer"
+                type="button"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          ) : sortedItems.length === 0 ? (
+            /* Empty state */
             <div className="w-full py-20 text-center bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
               <p className="text-sm font-semibold text-gray-600">
                 Tidak ada ruang kerja yang sesuai dengan pencarian Anda.
               </p>
               <button
-                onClick={() => setLokasiQuery("")}
+                onClick={() => {
+                  setSearchInput("");
+                  setDebouncedSearch("");
+                  setSelectedType("");
+                }}
                 className="mt-3 text-xs font-bold text-[#5E43F3] hover:underline cursor-pointer"
                 type="button"
               >
@@ -379,137 +520,143 @@ export default function SpacesDirectoryPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-              {filteredAndSortedSpaces.map((item) => (
-                <div
-                  key={item.id}
-                  className="group bg-white rounded-3xl border border-[#E5E7EB] p-4 flex flex-col justify-between hover:shadow-xl hover:border-gray-300 transition-all duration-300"
-                >
-                  <div>
-                    {/* Gambar Card dengan Badge */}
-                    <div className="relative w-full h-52 rounded-2xl overflow-hidden bg-gray-100 mb-4">
-                      <Image
-                        alt={item.nama}
-                        className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                        fill
-                        src={item.foto}
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      />
-                      {item.badge && (
-                        <span
-                          className={`absolute top-3 left-3 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm ${
-                            item.badge === "BARU"
-                              ? "bg-[#5E43F3] text-white"
-                              : "bg-white/90 text-gray-800 backdrop-blur-sm border border-gray-100"
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Baris Harga & Spesifikasi Fasilitas (Lega & Rapi) */}
-                    <div className="flex items-baseline justify-between gap-x-3 gap-y-1.5 pb-3 border-b border-gray-100 flex-wrap sm:flex-nowrap">
-                      <div className="flex items-baseline gap-1 shrink-0">
-                        <span className="text-base sm:text-[17px] font-extrabold text-[#111827] tracking-tight">
-                          Rp {item.hargaPerJam.toLocaleString("id-ID")}
-                        </span>
-                        <span className="text-[11px] text-gray-400 font-normal">
-                          / jam
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 text-gray-500 text-[10.5px] sm:text-[11px] font-medium shrink-0 ml-auto sm:ml-0">
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3 h-3 text-gray-400 shrink-0" />
-                          <span>{item.kapasitas} Orang</span>
-                        </span>
-                        <span className="text-gray-300">•</span>
-                        <span className="flex items-center gap-1">
-                          <Wifi className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <span>{item.wifiSpeed} Mbps</span>
-                        </span>
-                        {item.luasRuang && (
-                          <>
-                            <span className="text-gray-300">•</span>
-                            <span className="flex items-center gap-1">
-                              <Maximize2 className="w-3 h-3 text-gray-400 shrink-0" />
-                              <span>{item.luasRuang} m²</span>
+              {sortedItems.map((item) => {
+                const lokasiLabel =
+                  [item.owner?.nama_coworking, item.zona_lantai]
+                    .filter(Boolean)
+                    .join(" • ") || SPACE_TYPE_LABELS[item.tipe];
+                return (
+                  <div
+                    key={item.id}
+                    className="group bg-white rounded-3xl border border-[#E5E7EB] p-4 flex flex-col justify-between hover:shadow-xl hover:border-gray-300 transition-all duration-300"
+                  >
+                    <div>
+                      {/* Gambar Card dengan Badge */}
+                      <div className="relative w-full h-52 rounded-2xl overflow-hidden bg-gray-100 mb-4">
+                        {item.foto_url ? (
+                          <img
+                            src={item.foto_url}
+                            alt={item.nama_space}
+                            className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#5E43F3] to-[#4A32D6]">
+                            <span className="text-3xl font-bold text-white/70">
+                              {item.nama_space.charAt(0)}
                             </span>
-                          </>
+                          </div>
+                        )}
+                        {item.badge && (
+                          <span
+                            className={`absolute top-3 left-3 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm ${
+                              item.badge === "BARU"
+                                ? "bg-[#5E43F3] text-white"
+                                : "bg-white/90 text-gray-800 backdrop-blur-sm border border-gray-100"
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
                         )}
                       </div>
+
+                      {/* Baris Harga & Spesifikasi Fasilitas (Lega & Rapi) */}
+                      <div className="flex items-baseline justify-between gap-x-3 gap-y-1.5 pb-3 border-b border-gray-100 flex-wrap sm:flex-nowrap">
+                        <div className="flex items-baseline gap-1 shrink-0">
+                          <span className="text-base sm:text-[17px] font-extrabold text-[#111827] tracking-tight">
+                            Rp {item.harga_per_jam.toLocaleString("id-ID")}
+                          </span>
+                          <span className="text-[11px] text-gray-400 font-normal">
+                            / jam
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-gray-500 text-[10.5px] sm:text-[11px] font-medium shrink-0 ml-auto sm:ml-0">
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3 h-3 text-gray-400 shrink-0" />
+                            <span>{item.kapasitas} Orang</span>
+                          </span>
+                          {item.wifi_speed != null && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span className="flex items-center gap-1">
+                                <Wifi className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span>{item.wifi_speed} Mbps</span>
+                              </span>
+                            </>
+                          )}
+                          {item.ukuran_m2 != null && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span className="flex items-center gap-1">
+                                <Maximize2 className="w-3 h-3 text-gray-400 shrink-0" />
+                                <span>{Number(item.ukuran_m2)} m²</span>
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Judul Ruang & Sub-lokasi */}
+                      <div className="mt-3">
+                        <h3 className="text-base font-bold text-[#111827] leading-snug group-hover:text-[#5E43F3] transition-colors">
+                          {item.nama_space}
+                        </h3>
+                        <p className="text-xs text-gray-400 mt-1">{lokasiLabel}</p>
+                      </div>
                     </div>
 
-                    {/* Judul Ruang & Sub-lokasi */}
-                    <div className="mt-3">
-                      <h3 className="text-base font-bold text-[#111827] leading-snug group-hover:text-[#5E43F3] transition-colors">
-                        {item.nama}
-                      </h3>
-                      <p className="text-xs text-gray-400 mt-1">{item.lokasi}</p>
+                    {/* Tautan Aksi Bawah (membawa tanggal/jam/durasi dari bar filter) */}
+                    <div className="pt-5 mt-4 border-t border-gray-100 text-right">
+                      <Link
+                        className="text-xs font-bold text-[#5E43F3] hover:text-[#4A32D6] inline-flex items-center gap-1 transition-colors group-hover:translate-x-0.5"
+                        href={`/spaces/${item.slug ?? item.id}?tanggal=${tanggal}&jam_mulai=${jamMulai}&durasi_jam=${durasi}`}
+                      >
+                        <span>{CTA_LABELS[item.tipe]}</span>
+                      </Link>
                     </div>
                   </div>
-
-                  {/* Tautan Aksi Bawah */}
-                  <div className="pt-5 mt-4 border-t border-gray-100 text-right">
-                    <Link
-                      className="text-xs font-bold text-[#5E43F3] hover:text-[#4A32D6] inline-flex items-center gap-1 transition-colors group-hover:translate-x-0.5"
-                      href={`/spaces/${item.slug}`}
-                    >
-                      <span>{item.ctaText}</span>
-                    </Link>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
-          {/* ─── PAGINATION FOOTER ─────────────────────────────────────────── */}
+          {/* ─── PAGINATION FOOTER (digerakkan data.meta) ──────────────────── */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 pt-6 border-t border-gray-100 text-xs text-gray-500">
-            <span>Menampilkan 1–6 dari 18 ruang kerja</span>
+            <span>
+              Menampilkan {sortedItems.length} dari{" "}
+              {meta ? meta.total : sortedItems.length} ruang kerja
+            </span>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(1)}
-                type="button"
-                className={`w-7 h-7 rounded-full font-bold flex items-center justify-center transition-colors cursor-pointer ${
-                  currentPage === 1
-                    ? "bg-[#111827] text-white"
-                    : "hover:bg-gray-100 text-gray-700 font-medium"
-                }`}
-              >
-                1
-              </button>
-              <button
-                onClick={() => setCurrentPage(2)}
-                type="button"
-                className={`w-7 h-7 rounded-full font-bold flex items-center justify-center transition-colors cursor-pointer ${
-                  currentPage === 2
-                    ? "bg-[#111827] text-white"
-                    : "hover:bg-gray-100 text-gray-700 font-medium"
-                }`}
-              >
-                2
-              </button>
-              <button
-                onClick={() => setCurrentPage(3)}
-                type="button"
-                className={`w-7 h-7 rounded-full font-bold flex items-center justify-center transition-colors cursor-pointer ${
-                  currentPage === 3
-                    ? "bg-[#111827] text-white"
-                    : "hover:bg-gray-100 text-gray-700 font-medium"
-                }`}
-              >
-                3
-              </button>
-              <span className="px-1 text-gray-400">...</span>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(p + 1, 3))}
-                type="button"
-                className="hover:text-black font-semibold ml-2 cursor-pointer transition-colors"
-              >
-                Berikutnya →
-              </button>
-            </div>
+            {meta && meta.total_pages > 1 && (
+              <div className="flex items-center gap-2">
+                {Array.from({ length: meta.total_pages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      type="button"
+                      className={`w-7 h-7 rounded-full font-bold flex items-center justify-center transition-colors cursor-pointer ${
+                        currentPage === page
+                          ? "bg-[#111827] text-white"
+                          : "hover:bg-gray-100 text-gray-700 font-medium"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+                <button
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(p + 1, meta.total_pages))
+                  }
+                  disabled={currentPage >= meta.total_pages}
+                  type="button"
+                  className="hover:text-black font-semibold ml-2 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Berikutnya →
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ─── FOOTER REVEAL HINT PILL (PETUNJUK KETIKA MENTOK DI BAWAH) ─── */}
