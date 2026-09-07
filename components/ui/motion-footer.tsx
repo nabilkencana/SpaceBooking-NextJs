@@ -6,7 +6,8 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { Compass, Users, ArrowRight, ArrowUp } from "lucide-react";
+import { Compass, Users, ArrowRight, MapPin } from "lucide-react";
+import { usePublicLocation } from "@/hooks/useAdmin";
 
 // Register ScrollTrigger safely for React
 if (typeof window !== "undefined") {
@@ -181,11 +182,11 @@ export const MagneticButton = React.forwardRef<HTMLElement, MagneticButtonProps>
           });
         };
 
-        element.addEventListener("mousemove", handleMouseMove as any);
+        element.addEventListener("mousemove", handleMouseMove);
         element.addEventListener("mouseleave", handleMouseLeave);
 
         return () => {
-          element.removeEventListener("mousemove", handleMouseMove as any);
+          element.removeEventListener("mousemove", handleMouseMove);
           element.removeEventListener("mouseleave", handleMouseLeave);
         };
       }, element);
@@ -239,7 +240,6 @@ const MarqueeItem = ({ items }: { items?: string[] }) => {
 };
 
 export interface CinematicFooterProps {
-  brandName?: string;
   giantText?: string;
   heading?: string;
   marqueeItems?: string[];
@@ -252,7 +252,6 @@ export interface CinematicFooterProps {
 }
 
 export function CinematicFooter({
-  brandName = "Urspace",
   giantText = "URSPACE",
   heading = "Siap Mulai Bekerja?",
   marqueeItems,
@@ -260,9 +259,14 @@ export function CinematicFooter({
   creatorName = "Urspace",
   primaryButtonText = "Eksplorasi Ruang Kerja",
   primaryButtonHref = "/spaces",
-  secondaryButtonText = "Daftar Member Komunitas",
-  secondaryButtonHref = "/register",
+  secondaryButtonText = "Konsultasi Ruang Komunitas",
+  secondaryButtonHref = "/#consultation",
 }: CinematicFooterProps) {
+  const { data: location } = usePublicLocation();
+  const coworkingName = location?.nama_coworking ?? "Moklet Hub, Sawojajar, Malang";
+  const hotline = location?.hotline ?? location?.telp ?? "(+62) 812 9876 5432";
+  const address = location?.alamat ?? "Jl. Danau Ranau No. 01, Sawojajar, Kota Malang 65139";
+
   const wrapperRef = useRef<HTMLDivElement>(null);
   const giantTextRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -434,11 +438,28 @@ export function CinematicFooter({
                 </MagneticButton>
                 <MagneticButton
                   as="a"
-                  href="mailto:hello@homa.app"
+                  href={`tel:${hotline.replace(/[^+\d]/g, "")}`}
                   className="footer-glass-pill px-6 py-3 rounded-full text-[#4B5563] font-medium text-xs md:text-sm hover:text-brand-purple"
                 >
                   Pusat Bantuan & Kontak
                 </MagneticButton>
+              </div>
+
+              {/* Live lokasi coworking (GET /location/profile via usePublicLocation) */}
+              <div className="flex flex-col items-center gap-1.5 mt-4 text-center">
+                <p className="flex items-center gap-2 text-[10px] md:text-xs font-bold uppercase tracking-[0.3em] text-[#374151]">
+                  <MapPin className="w-3.5 h-3.5 shrink-0 text-brand-purple" />
+                  {coworkingName}
+                </p>
+                <p className="max-w-xl text-[10px] md:text-xs font-medium leading-relaxed text-[#6B7280]">
+                  {address}
+                </p>
+                <a
+                  href={`tel:${hotline.replace(/[^+\d]/g, "")}`}
+                  className="text-[10px] md:text-xs font-bold uppercase tracking-[0.25em] text-brand-purple transition-colors hover:text-brand-dark"
+                >
+                  Hotline {hotline}
+                </a>
               </div>
             </div>
           </div>

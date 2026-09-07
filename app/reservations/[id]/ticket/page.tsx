@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
-import { GlobalFooter } from "@/components/layout/GlobalFooter";
+import { MotionFooter } from "@/components/ui/motion-footer";
 import { SmoothScroll } from "@/components/ui/SmoothScroll";
 import { useETicket } from "@/hooks/useReservasi";
 import { usePublicLocation } from "@/hooks/useAdmin";
@@ -844,7 +844,7 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
 
       {/* ─── 3. LIVE-DATA MASTER FOOTER ────────────────────────────────────── */}
       <div id="ticket-footer-section" ref={footerSectionRef} className="print:hidden">
-        <GlobalFooter />
+        <MotionFooter />
       </div>
     </div>
   );

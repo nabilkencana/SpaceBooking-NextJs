@@ -19,7 +19,7 @@ import { unwrapApi } from "@/lib/api";
 import { useSpacesQuery } from "@/hooks/useSpaces";
 import { SPACE_TYPE_LABELS, type SpaceType } from "@/types";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
-import { GlobalFooter } from "@/components/layout/GlobalFooter";
+import { MotionFooter } from "@/components/ui/motion-footer";
 import { SmoothScroll } from "@/components/ui/SmoothScroll";
 
 const SORT_OPTIONS = [
@@ -689,7 +689,7 @@ export default function SpacesDirectoryPage() {
 
       {/* ─── 2. LIVE-DATA MASTER FOOTER (TERLETAK ALAMI DI BAWAH DIREKTORI) ─ */}
       <div id="spaces-footer-section" ref={footerSectionRef}>
-        <GlobalFooter />
+        <MotionFooter />
       </div>
     </div>
   );
