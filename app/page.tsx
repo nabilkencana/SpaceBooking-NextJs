@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
+import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { HeroSection } from "@/components/HeroSection";
-import MotionFooter from "@/components/ui/motion-footer";
 import { WorkspaceOptionsSection } from "@/components/WorkspaceOptionsSection";
 import { AvailableSpacesSection } from "@/components/AvailableSpacesSection";
 import { CommunityConsultationCurtain } from "@/components/CommunityConsultationCurtain";
@@ -303,8 +303,8 @@ export default function UrspaceLandingPage() {
       </section>
       </div>
 
-      {/* ─── 8. CINEMATIC EDITORIAL MOTION FOOTER (CURTAIN REVEAL UNDERNEATH) ─ */}
-      <MotionFooter />
+      {/* ─── 8. LIVE-DATA MASTER FOOTER (GET /location/profile VIA usePublicLocation) ─ */}
+      <GlobalFooter />
     </div>
   );
 }

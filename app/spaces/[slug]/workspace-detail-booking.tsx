@@ -40,7 +40,7 @@ import {
 import axios from "axios";
 import { toast } from "sonner";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
-import MotionFooter from "@/components/ui/motion-footer";
+import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { SmoothScroll } from "@/components/ui/SmoothScroll";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { ApiRequestError, type ApiError } from "@/lib/api";
@@ -1133,9 +1133,9 @@ export default function WorkspaceDetailBooking({
       </main>
       </div>
 
-      {/* ─── 3. MASTER MOTION FOOTER (TERLETAK ALAMI DI BAWAH DETAIL) ───── */}
+      {/* ─── 3. LIVE-DATA MASTER FOOTER (TERLETAK ALAMI DI BAWAH DETAIL) ── */}
       <div id="spaces-detail-footer-section" ref={footerSectionRef}>
-        <MotionFooter />
+        <GlobalFooter />
       </div>
 
       {/* ─── 4. MODAL INSTANT BOOKING CONFIRMATION (BESPOKE EDITORIAL DESIGN) ─── */}

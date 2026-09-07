@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
-import MotionFooter from "@/components/ui/motion-footer";
+import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { SmoothScroll } from "@/components/ui/SmoothScroll";
 import { RequireAuth } from "@/hooks/useAuth";
 import { useMyHistory, useCancelReservation } from "@/hooks/useReservasi";
@@ -734,9 +734,9 @@ function MemberReservationsDashboardContent() {
       </main>
       </div>
 
-      {/* ─── 3. CINEMATIC MOTION FOOTER ────────────────────────────────────── */}
+      {/* ─── 3. LIVE-DATA MASTER FOOTER ───────────────────────────────────── */}
       <div id="reservation-footer-section">
-        <MotionFooter />
+        <GlobalFooter />
       </div>
     </div>
   );
