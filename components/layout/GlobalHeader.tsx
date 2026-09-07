@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { usePendingCount } from "@/hooks/useAdmin";
 import {
   BarChart3,
   Bell,
@@ -53,6 +54,46 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Data Reservasi", href: "/admin/reservations" },
   { label: "Laporan", href: "/admin" },
 ];
+
+// Subkomponen terpisah agar usePendingCount hanya aktif untuk admin_space.
+function AdminPendingBadge() {
+  const { data: pendingCount } = usePendingCount();
+  if (!pendingCount) return null;
+  return (
+    <span className="ml-1.5 inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-brand-purple px-1.5 text-[11px] font-semibold leading-none text-white">
+      {pendingCount}
+    </span>
+  );
+}
+
+function DesktopNavLink({
+  item,
+  active,
+  showPendingBadge,
+  onNavClick,
+}: {
+  item: NavItem;
+  active: boolean;
+  showPendingBadge: boolean;
+  onNavClick: (e: React.MouseEvent<HTMLAnchorElement>, href: string) => void;
+}) {
+  return (
+    <Link
+      href={item.href}
+      onClick={(e) => onNavClick(e, item.href)}
+      className={
+        active
+          ? "text-[#0F172A] font-semibold relative py-2 after:content-[''] after:absolute after:-bottom-6 after:left-0 after:w-full after:h-0.5 after:bg-[#0F172A]"
+          : "text-[#64748B] hover:text-[#0F172A] transition-colors py-2 font-normal"
+      }
+    >
+      {item.label}
+      {showPendingBadge && item.href === "/admin/reservations" ? (
+        <AdminPendingBadge />
+      ) : null}
+    </Link>
+  );
+}
 
 export function GlobalHeader({ isLoggedIn }: GlobalHeaderProps = {}) {
   const pathname = usePathname();
@@ -174,23 +215,15 @@ export function GlobalHeader({ isLoggedIn }: GlobalHeaderProps = {}) {
 
         {/* ─── ZONE 2: SISI TENGAH (NAVIGASI UTAMA DINAMIS & KONSISTEN) ─────────── */}
         <div className="hidden md:flex items-center gap-8 text-sm font-normal">
-          {navItems.map((item) => {
-            const active = isLinkActive(item.href);
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={(e) => handleNavClick(e, item.href)}
-                className={
-                  active
-                    ? "text-[#0F172A] font-semibold relative py-2 after:content-[''] after:absolute after:-bottom-6 after:left-0 after:w-full after:h-0.5 after:bg-[#0F172A]"
-                    : "text-[#64748B] hover:text-[#0F172A] transition-colors py-2 font-normal"
-                }
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+          {navItems.map((item) => (
+            <DesktopNavLink
+              key={item.label}
+              item={item}
+              active={isLinkActive(item.href)}
+              showPendingBadge={isAdminSpace}
+              onNavClick={handleNavClick}
+            />
+          ))}
         </div>
 
         {/* ─── ZONE 3: SISI KANAN (UTILITY & AUTENTIKASI PENGGUNA) ─────────────── */}
@@ -316,7 +349,7 @@ export function GlobalHeader({ isLoggedIn }: GlobalHeaderProps = {}) {
                           <span>Reservasi Saya</span>
                         </Link>
                         <Link
-                          href="/reservations/12/ticket"
+                          href="/reservations"
                           onClick={() => setProfileDropdownOpen(false)}
                           className="flex items-center gap-2.5 px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 hover:text-black transition-colors"
                         >
@@ -463,7 +496,7 @@ export function GlobalHeader({ isLoggedIn }: GlobalHeaderProps = {}) {
                         Reservasi Saya
                       </Link>
                       <Link
-                        href="/reservations/12/ticket"
+                        href="/reservations"
                         className="min-h-11 flex items-center px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded-lg"
                       >
                         Tiket & E-Pass Aktif

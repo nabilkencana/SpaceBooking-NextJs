@@ -1,10 +1,18 @@
+"use client";
+
 import Link from "next/link";
+import { usePublicLocation } from "@/hooks/useAdmin";
 
 const MASK_IMAGE_URL =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBKfaBOO-mAmrZRI3UXEexYatnvkGYTro5n6054NEJ3TQGOwqJyCm_tXQW78Vp2lymNELdMTQSELxKFZese0hxD7YyE_2Bl-OIyA-h8tMlR9Jb4aOgFAJt_ewJl-hEgaHHBBIHG_GjlJXUzkJwL1fKZH5rQqGUFvF8MkBluVz1eIYCUBKDZiqCah8OgDN_yBSxpIH34PidjWyF7tUuljy4oDcwMN7IB9DwjaZOn2sdODC2InXimp_9cmw";
 
 const PANORAMA_IMAGE_URL =
   "/images/coworking-hero.jpg";
+
+// Teks statis hanya fallback terakhir (kontrak: live data dari GET /location/profile adalah sumber utama).
+const FALLBACK_NAME = "Moklet Hub, Sawojajar, Malang";
+const FALLBACK_HOTLINE = "(+62) 812 9876 5432";
+const FALLBACK_ADDRESS = "Jl. Danau Ranau No. 01, Sawojajar, Kota Malang 65139";
 
 /**
  * GlobalFooter Component
@@ -16,6 +24,10 @@ const PANORAMA_IMAGE_URL =
  * - Full-bleed bottom panoramic coworking table photo banner
  */
 export function GlobalFooter() {
+  const { data: location } = usePublicLocation();
+  const coworkingName = location?.nama_coworking ?? FALLBACK_NAME;
+  const hotline = location?.hotline ?? location?.telp ?? FALLBACK_HOTLINE;
+  const address = location?.alamat ?? FALLBACK_ADDRESS;
   return (
     <footer className="w-full bg-white pt-10 sm:pt-14 md:pt-18 pb-0 overflow-hidden border-t border-[#E5E7EB] mt-0">
       {/* ─── MAIN FOOTER CONTENT WRAPPER ──────────────────────────────────── */}
@@ -56,9 +68,8 @@ export function GlobalFooter() {
                     hello@urspace.id
                   </a>
                 </p>
-                <p>Moklet Hub, Sawojajar, Malang</p>
-                <p>(+62) 812 9876 5432</p>
-              </div>
+                <p>{coworkingName}</p>
+                <p>{hotline}</p>              </div>
             </div>
 
             {/* Kolom 2: Komunitas */}
@@ -126,9 +137,8 @@ export function GlobalFooter() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 pb-10 md:pb-12">
           {/* Sisi Kiri: Alamat 4 Baris Rapi */}
           <div className="text-[11px] sm:text-[12px] text-neutral-800 leading-[1.65] space-y-0.5 text-left font-normal">
-            <p>Jl. Danau Ranau No. 01</p>
-            <p>Sawojajar, Kota Malang 65139</p>
-            <p>(0341) 712500</p>
+            <p>{address}</p>
+            <p>{hotline}</p>
             <p>
               <a
                 href="mailto:info@urspace.id"
