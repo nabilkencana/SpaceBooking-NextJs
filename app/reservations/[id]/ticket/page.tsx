@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -16,6 +16,163 @@ import { toast } from "sonner";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
 import MotionFooter from "@/components/ui/motion-footer";
 import { SmoothScroll } from "@/components/ui/SmoothScroll";
+import { useETicket } from "@/hooks/useReservasi";
+import { usePublicLocation } from "@/hooks/useAdmin";
+import { useRequireAuth } from "@/hooks/useAuth";
+import { ApiRequestError } from "@/lib/api";
+import type { ReservasiStatus } from "@/types";
+
+// ─── Page-local formatters (server data formatting only — no pricing math) ──
+
+const formatRupiah = (val: number) =>
+  "Rp " + new Intl.NumberFormat("id-ID").format(val);
+
+const parseUtcDate = (value: string) => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  return new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0),
+  );
+};
+
+const HARI_INDO = [
+  "Minggu",
+  "Senin",
+  "Selasa",
+  "Rabu",
+  "Kamis",
+  "Jumat",
+  "Sabtu",
+] as const;
+
+const BULAN_INDO = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+] as const;
+
+function formatTanggalIndo(value: string) {
+  const date = parseUtcDate(value);
+  if (!date) return value;
+  return `${HARI_INDO[date.getUTCDay()]}, ${date.getUTCDate()} ${
+    BULAN_INDO[date.getUTCMonth()]
+  } ${date.getUTCFullYear()}`;
+}
+
+function timeToMinutes(hhmm: string): number | null {
+  const match = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function minutesToTime(total: number): string {
+  const normalized = ((total % 1440) + 1440) % 1440;
+  const hh = String(Math.floor(normalized / 60)).padStart(2, "0");
+  const mm = String(normalized % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+// Nominal jam_selesai dapat >= 24:00 (mis. "26:00") — tampilkan digulir ke hari berikutnya.
+function rollTimeForDisplay(hhmm: string): string {
+  const minutes = timeToMinutes(hhmm);
+  if (minutes === null) return hhmm;
+  return minutesToTime(minutes);
+}
+
+const statusLabel = (status: ReservasiStatus) => {
+  const labels: Record<ReservasiStatus, string> = {
+    belum_dikonfirm: "Menunggu Konfirmasi",
+    disetujui: "Disetujui",
+    aktif: "Aktif / Digunakan",
+    selesai: "Selesai",
+    dibatalkan: "Dibatalkan",
+  };
+  return labels[status];
+};
+
+const statusChipClass = (status: ReservasiStatus) => {
+  const classes: Record<ReservasiStatus, string> = {
+    belum_dikonfirm: "bg-amber-400 text-black",
+    disetujui: "bg-[#3B38F6] text-white",
+    aktif: "bg-emerald-500 text-white",
+    selesai: "bg-gray-500 text-white",
+    dibatalkan: "bg-red-500 text-white",
+  };
+  return classes[status];
+};
+
+function escapeIcsText(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+
+function addDaysToIsoDate(value: string, days: number): string {
+  const date = parseUtcDate(value);
+  if (!date) return value;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+// .ics sesuai RFC 5545 — zona Asia/Jakarta (WIB, UTC+7) via TZID.
+function buildIcsContent(opts: {
+  summary: string;
+  description: string;
+  location: string;
+  tanggal: string;
+  jamMulai: string;
+  jamSelesai: string;
+  uid: string;
+}): string | null {
+  const startMinutes = timeToMinutes(opts.jamMulai);
+  const endTotalMinutes = timeToMinutes(opts.jamSelesai);
+  if (startMinutes === null || endTotalMinutes === null) return null;
+
+  // jam_selesai nominal >= 24:00 (mis. "26:00") digulir ke hari berikutnya.
+  const dayOffset = Math.floor(endTotalMinutes / 1440);
+  const endMinutes = endTotalMinutes % 1440;
+  const tanggalMulai = opts.tanggal.slice(0, 10);
+  const tanggalSelesai = addDaysToIsoDate(tanggalMulai, dayOffset);
+
+  const dtstamp = new Date()
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}/, "");
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Urspace//Coworking Ticket//ID",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${opts.uid}`,
+    `DTSTAMP:${dtstamp}`,
+    `SUMMARY:${escapeIcsText(opts.summary)}`,
+    `DESCRIPTION:${escapeIcsText(opts.description)}`,
+    `LOCATION:${escapeIcsText(opts.location)}`,
+    `DTSTART;TZID=Asia/Jakarta:${tanggalMulai.replace(/-/g, "")}T${minutesToTime(
+      startMinutes,
+    )}00`,
+    `DTEND;TZID=Asia/Jakarta:${tanggalSelesai.replace(/-/g, "")}T${minutesToTime(
+      endMinutes,
+    )}00`,
+    "STATUS:CONFIRMED",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -23,49 +180,36 @@ interface PageProps {
 
 export default function WorkspaceTicketPage({ params }: PageProps) {
   const resolvedParams = use(params);
-  const ticketId = resolvedParams.id || "12";
+  const ticketId = resolvedParams.id;
+  const numericId = Number(ticketId);
 
-  // Dynamic Metadata based on ticket ID
-  const formattedSuffix = ticketId.padStart(4, "0");
-  const bookingReference = `BOOK-20260830-${formattedSuffix}`;
-  const serialToken = `TICKET-MOKLET-20260830-${formattedSuffix}`;
-  const payloadString = `VERIFY-RESERVASI-${ticketId}-BOOK-20260830-${formattedSuffix}`;
+  // Halaman privat member — redirect ke /login saat belum terautentikasi.
+  const { isAuthenticated, isLoading: authLoading } = useRequireAuth("/login");
 
-  // Action 1: Print or Export PDF
-  const handlePrint = () => {
-    window.print();
-  };
+  const eTicketQuery = useETicket(numericId);
+  const locationQuery = usePublicLocation();
 
-  // Action 2: Download Calendar .ics Event
-  const handleDownloadICS = () => {
-    const icsContent = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//Urspace//Coworking Ticket//ID",
-      "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH",
-      "BEGIN:VEVENT",
-      "SUMMARY:Reservasi Meja - Moklet Hub Coworking Space",
-      `DESCRIPTION:Reservasi ruang kerja Urspace.\\nNo. Referensi: ${bookingReference}\\nSerial: ${serialToken}\\nTunjukkan QR Instant Pass pada scanner turnstile saat kedatangan.`,
-      "LOCATION:Moklet Hub Coworking Space, Jl. Pantai Batu Bolong No. 42, Canggu, Bali",
-      "DTSTART:20260830T010000Z", // 09:00 WITA (UTC+8) -> 01:00 UTC
-      "DTEND:20260830T040000Z",   // 12:00 WITA (UTC+8) -> 04:00 UTC
-      "STATUS:CONFIRMED",
-      "END:VEVENT",
-      "END:VCALENDAR",
-    ].join("\r\n");
+  // Sesi hangus setelah hidrasi (401 dari endpoint e-ticket) → /login.
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      eTicketQuery.error instanceof ApiRequestError &&
+      eTicketQuery.error.statusCode === 401
+    ) {
+      window.location.assign("/login");
+    }
+  }, [isAuthenticated, eTicketQuery.error]);
 
-    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `reservasi-urspace-${bookingReference}.ics`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    toast.success("File kalender (.ics) berhasil diunduh!");
-  };
+  const ticket = eTicketQuery.data;
+  const location = locationQuery.data;
+
+  // Nilai venue & kontak: endpoint lokasi publik dulu, fallback dari e-ticket.
+  const venueName =
+    location?.nama_coworking ?? ticket?.coworking_space?.nama ?? null;
+  const venueAddress =
+    location?.alamat ?? ticket?.coworking_space?.alamat ?? null;
+  const venuePhone = location?.hotline ?? ticket?.coworking_space?.telepon ?? null;
+  const waDigits = venuePhone ? venuePhone.replace(/\D/g, "") : "";
 
   // Two-stage smooth scroll state
   const [isAtBottom, setIsAtBottom] = useState(false);
@@ -229,8 +373,123 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
     }
   };
 
+  // Action 1: Print (Cetak / Simpan sebagai PDF via dialog sistem)
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Action 2: Download Calendar .ics Event (dari jadwal live reservasi)
+  const handleDownloadICS = () => {
+    if (!ticket) {
+      toast.error("Data tiket belum siap, coba beberapa saat lagi.");
+      return;
+    }
+
+    const icsContent = buildIcsContent({
+      summary: `Reservasi ${ticket.space?.nama ?? "Space"} - ${venueName ?? "Coworking Space"}`,
+      description: `Reservasi ruang kerja Urspace.\nNo. Referensi: ${ticket.kode_booking}\nSerial: ${ticket.e_ticket_number}\nTunjukkan QR Instant Pass pada scanner turnstile saat kedatangan.`,
+      location: [venueName, venueAddress].filter(Boolean).join(", "),
+      tanggal: ticket.jadwal.tanggal,
+      jamMulai: ticket.jadwal.jam_mulai,
+      jamSelesai: ticket.jadwal.jam_selesai,
+      uid: `${ticket.e_ticket_number}@urspace`,
+    });
+
+    if (!icsContent) {
+      toast.error("Jadwal reservasi tidak valid untuk dibuat ke kalender.");
+      return;
+    }
+
+    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `reservasi-${ticket.kode_booking}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    toast.success("File kalender (.ics) berhasil diunduh!");
+  };
+
+  // ─── Auth gate: tunggu profil, redirect berjalan via useRequireAuth ───
+  if (authLoading || !isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full bg-[#F9FAFB] flex items-center justify-center print:bg-white">
+        <p className="text-sm text-gray-500 font-semibold">Memeriksa sesi...</p>
+      </div>
+    );
+  }
+
+  // ─── Error state (bukan 401 — 401 sudah diarahkan ke /login) ───
+  if (eTicketQuery.error || !Number.isFinite(numericId)) {
+    return (
+      <div className="min-h-screen w-full bg-[#F9FAFB] flex items-center justify-center px-4 print:bg-white">
+        <div className="max-w-md w-full bg-white rounded-3xl border border-[#E5E7EB] shadow-[0_20px_50px_rgba(0,0,0,0.06)] p-8 text-center">
+          <ShieldCheck className="w-10 h-10 text-gray-300 mx-auto" />
+          <h1 className="text-lg font-black text-[#111827] mt-4">
+            E-Tiket Tidak Dapat Dimuat
+          </h1>
+          <p className="text-sm text-gray-500 mt-2">
+            {eTicketQuery.error instanceof ApiRequestError
+              ? eTicketQuery.error.message
+              : "Terjadi kesalahan saat memuat e-tiket."}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 mt-6">
+            <button
+              type="button"
+              onClick={() => eTicketQuery.refetch()}
+              className="flex-1 bg-[#5E43F3] hover:bg-[#4A32D6] text-white font-bold py-3 px-5 rounded-2xl text-xs sm:text-sm cursor-pointer transition-all"
+            >
+              Coba Lagi
+            </button>
+            <Link
+              href="/reservations"
+              className="flex-1 bg-white hover:bg-gray-50 text-[#111827] border border-[#E5E7EB] font-bold py-3 px-5 rounded-2xl text-xs sm:text-sm transition-all"
+            >
+              Kembali ke Reservasi Saya
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Loading state ───
+  if (!ticket) {
+    return (
+      <div className="min-h-screen w-full bg-[#F9FAFB] flex items-center justify-center print:bg-white">
+        <p className="text-sm text-gray-500 font-semibold animate-pulse">
+          Memuat e-tiket...
+        </p>
+      </div>
+    );
+  }
+
+  // ─── Nilai live dari server ───
+  const payloadString = ticket.qr_code_payload;
+  const guestInitials =
+    ticket.member?.nama
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word.charAt(0).toUpperCase())
+      .join("") || "UR";
+  const jamSelesaiDisplay = rollTimeForDisplay(ticket.jadwal.jam_selesai);
+
   return (
     <div className="min-h-screen w-full bg-[#F9FAFB] text-[#111827] flex flex-col font-sans selection:bg-[#5E43F3] selection:text-white print:bg-white">
+      <style
+        dangerouslySetInnerHTML={{
+          __html: [
+            "@media print {",
+            "  @page { margin: 12mm; }",
+            "  html, body { background: #ffffff !important; }",
+            "  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }",
+            "}",
+          ].join("\n"),
+        }}
+      />
       <SmoothScroll />
 
       {/* ─── 1. TICKET PAGE WRAPPER (MENTOK DULU DI SINI SEBELUM FOOTER) ──── */}
@@ -246,7 +505,7 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
 
         {/* ─── TICKET WORKSPACE CANVAS ────────────────────────────────────── */}
         <main className="w-full flex-1 py-8 sm:py-10 px-4 sm:px-6 flex flex-col items-center justify-start print:p-0 print:m-0">
-        
+
         {/* A. Top Action & API Reference Bar */}
         <div className="max-w-2xl mx-auto mb-5 flex items-center justify-between w-full print:hidden">
           <Link
@@ -260,10 +519,10 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
 
         {/* B. ANATOMI KARTU TIKET BOARDING PASS */}
         <div className="max-w-2xl mx-auto w-full bg-white rounded-3xl border border-[#E5E7EB] shadow-[0_20px_50px_rgba(0,0,0,0.06)] overflow-hidden relative print:shadow-none print:border print:m-0 print:w-full print:rounded-2xl">
-          
+
           {/* 1. Header Rintisan Tiket Atas (Kuning Kenari Urspace Gold) */}
           <div className="bg-[#FFD500] p-6 sm:p-8">
-            {/* Baris Atas Banner Kuning: Status Masuk & Badge Biru */}
+            {/* Baris Atas Banner Kuning: Status Masuk & Badge Status */}
             <div className="flex items-center justify-between gap-3 pb-3">
               <div className="flex items-center gap-1.5 text-black">
                 <ShieldCheck className="w-4 h-4 text-black shrink-0" strokeWidth={2.5} />
@@ -272,8 +531,8 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                 </span>
               </div>
 
-              <span className="px-3.5 py-1 rounded-full bg-[#3B38F6] text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider shadow-xs shrink-0">
-                DISETUJUI / AKSES AKTIF
+              <span className={`px-3.5 py-1 rounded-full text-[10px] sm:text-[11px] font-black uppercase tracking-wider shadow-xs shrink-0 ${statusChipClass(ticket.status_reservasi)}`}>
+                {statusLabel(ticket.status_reservasi)}
               </span>
             </div>
 
@@ -284,12 +543,14 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                   LOKASI RUANG KERJA
                 </span>
                 <h1 className="text-2xl sm:text-3xl font-black text-[#111827] tracking-tight leading-tight">
-                  Moklet Hub Coworking Space
+                  {venueName ?? "Coworking Space"}
                 </h1>
-                <div className="flex items-center gap-1.5 text-xs text-[#111827]/80 font-medium mt-1.5">
-                  <MapPin className="w-3.5 h-3.5 shrink-0 text-[#111827]" />
-                  <span>Jl. Pantai Batu Bolong No. 42, Canggu, Bali • Lantai 2</span>
-                </div>
+                {venueAddress && (
+                  <div className="flex items-center gap-1.5 text-xs text-[#111827]/80 font-medium mt-1.5">
+                    <MapPin className="w-3.5 h-3.5 shrink-0 text-[#111827]" />
+                    <span>{venueAddress}</span>
+                  </div>
+                )}
               </div>
 
               {/* Kotak Referensi Booking (Kuning Muda Krim Sesuai Gambar) */}
@@ -297,11 +558,8 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                 <span className="text-[9px] font-extrabold tracking-wider text-gray-600 uppercase block font-mono">
                   NO. REFERENSI BOOKING
                 </span>
-                <span className="text-base sm:text-lg font-black font-mono text-[#111827] tracking-wider block mt-0.5 leading-tight">
-                  BOOK-20260830-
-                </span>
-                <span className="text-base sm:text-lg font-black font-mono text-[#111827] tracking-wider block leading-tight">
-                  {formattedSuffix}
+                <span className="text-base sm:text-lg font-black font-mono text-[#111827] tracking-wider block mt-0.5 leading-tight break-all">
+                  {ticket.kode_booking}
                 </span>
               </div>
             </div>
@@ -311,17 +569,17 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
           <div className="relative w-full bg-white py-0 my-0">
             {/* Lubang Sobekan Samping Kiri */}
             <div className="absolute -left-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-[#F9FAFB] border-r border-[#E5E7EB] z-10 print:bg-white" />
-            
+
             {/* Garis Border Putus-Putus */}
             <div className="w-full border-b-2 border-dashed border-gray-200" />
-            
+
             {/* Lubang Sobekan Samping Kanan */}
             <div className="absolute -right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-[#F9FAFB] border-l border-[#E5E7EB] z-10 print:bg-white" />
           </div>
 
           {/* 3. Badan Utama Tiket (Ticket Main Body) */}
           <div className="p-6 sm:p-8 space-y-6 bg-white">
-            
+
             {/* A. Baris Atas: Ruang Kerja & Jadwal Penggunaan (2 Kolom) */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pb-6 border-b border-gray-100">
               {/* Sisi Kiri: Ruang Kerja & Tipe */}
@@ -330,14 +588,13 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                   RUANG KERJA &amp; TIPE
                 </span>
                 <h2 className="text-lg sm:text-xl font-black text-[#111827] tracking-tight">
-                  Personal Desk — Flexi 01
+                  {ticket.space?.nama ?? "Space Reservasi"}
                 </h2>
-                <p className="text-xs text-gray-600 mt-1">
-                  Tipe: <span className="font-bold text-gray-900">Meja Mandiri</span> • Kapasitas: <span className="font-bold text-gray-900">1 Orang</span>
-                </p>
-                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-                  Termasuk: Meja Ergonomis, Stopkontak Mandiri, &amp; Internet WiFi Fiber 100 Mbps
-                </p>
+                {ticket.space && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Tipe: <span className="font-bold text-gray-900">{ticket.space.tipe}</span>
+                  </p>
+                )}
               </div>
 
               {/* Sisi Kanan: Jadwal Penggunaan */}
@@ -346,10 +603,11 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                   JADWAL PENGGUNAAN
                 </span>
                 <h3 className="text-lg sm:text-xl font-black text-[#111827] tracking-tight">
-                  Minggu, 30 Agustus 2026
+                  {formatTanggalIndo(ticket.jadwal.tanggal)}
                 </h3>
                 <p className="text-xs sm:text-sm font-semibold text-gray-600 mt-1 font-mono">
-                  09:00 - 12:00 WITA • (Durasi: 3 Jam)
+                  {ticket.jadwal.jam_mulai} - {jamSelesaiDisplay} WIB
+                  {ticket.jadwal.durasi ? ` • (Durasi: ${ticket.jadwal.durasi})` : ""}
                 </p>
                 <div className="mt-2">
                   <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/90 px-3 py-0.5 rounded-full inline-block">
@@ -369,15 +627,17 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                 {/* Kolom 1: Member */}
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-700 shrink-0">
-                    JD
+                    {guestInitials}
                   </div>
                   <div>
                     <span className="text-xs font-bold text-[#111827] block leading-tight">
-                      John Doe
+                      {ticket.member?.nama ?? "Tamu"}
                     </span>
-                    <span className="text-[10px] text-gray-400 block mt-0.5 leading-tight">
-                      PT Inovasi Digital
-                    </span>
+                    {ticket.member?.instansi && (
+                      <span className="text-[10px] text-gray-400 block mt-0.5 leading-tight">
+                        {ticket.member.instansi}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -385,7 +645,7 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                 <div>
                   <span className="text-[10px] text-gray-400 block">Nomor WhatsApp:</span>
                   <span className="text-xs font-bold text-gray-900 font-mono block mt-0.5">
-                    +62 812-3456-7890
+                    {ticket.member?.telp ?? "-"}
                   </span>
                 </div>
 
@@ -394,14 +654,14 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                   <span className="text-[10px] text-gray-400 block">Metode Pembayaran:</span>
                   <div className="mt-0.5">
                     <span className="px-2.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs font-bold font-mono inline-block">
-                      QRIS (Lunas)
+                      {ticket.rincian_pembayaran.total_dibayar > 0 ? "Lunas" : "Belum Bayar"}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* C. Rincian Transaksi & Kalkulasi Monospace */}
+            {/* C. Rincian Transaksi & Kalkulasi Monospace (nilai dari server) */}
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-3 font-mono">
                 RINCIAN TRANSAKSI &amp; PEMBAYARAN
@@ -409,19 +669,26 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
 
               <div className="space-y-2 text-xs">
                 <div className="flex items-center justify-between text-gray-700">
-                  <span className="font-mono">Tarif Dasar Sewa (Rp 20.000 × 3 jam)</span>
-                  <span className="font-mono font-bold text-gray-900">Rp 60.000</span>
+                  <span className="font-mono">Tarif Dasar Sewa</span>
+                  <span className="font-mono font-bold text-gray-900">
+                    {formatRupiah(ticket.rincian_pembayaran.tarif_kotor)}
+                  </span>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-emerald-600 font-medium font-sans">Diskon Promo Member</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold font-mono">
-                      DISKONHEMAT20 (-20%)
-                    </span>
-                  </div>
-                  <span className="font-mono font-bold text-emerald-600">-Rp 12.000</span>
-                </div>
+                {ticket.rincian_pembayaran.diskon_promo &&
+                  ticket.rincian_pembayaran.potongan > 0 && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-600 font-medium font-sans">Diskon Promo</span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold font-mono">
+                          {ticket.rincian_pembayaran.diskon_promo}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-emerald-600">
+                        -{formatRupiah(ticket.rincian_pembayaran.potongan)}
+                      </span>
+                    </div>
+                  )}
               </div>
 
               <div className="border-t border-gray-100 my-4" />
@@ -432,16 +699,16 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                     Total Telah Dibayar
                   </span>
                   <span className="text-[10px] font-mono text-gray-400 block mt-1">
-                    Status: Terverifikasi oleh Bank Settlement
+                    No. Tiket: {ticket.e_ticket_number}
                   </span>
                 </div>
 
                 <div className="text-right">
                   <span className="text-3xl font-black font-mono text-[#111827] block leading-none">
-                    Rp 48.000
+                    {formatRupiah(ticket.rincian_pembayaran.total_dibayar)}
                   </span>
                   <span className="text-[10px] font-mono text-gray-400 block mt-1">
-                    ID Transaksi: TRX-20260830-4891
+                    Ref: {ticket.kode_booking}
                   </span>
                 </div>
               </div>
@@ -470,7 +737,7 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                     SERIAL TOKEN
                   </span>
                   <span className="text-xs sm:text-sm font-black font-mono text-[#111827] tracking-wider ml-2.5">
-                    {serialToken}
+                    {ticket.e_ticket_number}
                   </span>
                 </div>
 
@@ -481,7 +748,11 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
                 <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-3 font-mono">
                   <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" strokeWidth={2.5} />
                   <span>
-                    Payload: <strong className="text-gray-700">{payloadString}</strong> •
+                    Payload:{" "}
+                    <strong className="text-gray-700" data-testid="qr-payload">
+                      {payloadString}
+                    </strong>{" "}
+                    •
                   </span>
                 </div>
 
@@ -495,8 +766,8 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
 
           {/* E. Security Strip Bawah (Microprint Footer Tiket) */}
           <div className="bg-[#F8F9FA] border-t border-gray-100 px-6 sm:px-8 py-3 flex justify-between items-center text-[9px] font-mono text-gray-400 uppercase tracking-wider">
-            <span>SECURITY HASH: 7F8A2D3C4E9B01F2</span>
-            <span>GATEWAY: BALI-CANGGU-NODE-01</span>
+            <span>NO. TIKET: {ticket.e_ticket_number}</span>
+            <span>REF: {ticket.kode_booking}</span>
           </div>
 
         </div>
@@ -523,17 +794,23 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
             </button>
           </div>
 
-          <p className="text-[11px] text-gray-500 text-center block pt-2">
-            Kendala akses saat di lokasi? Hubungi tim meja depan via{" "}
-            <a
-              href="https://wa.me/6281234567890"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#5E43F3] font-bold hover:underline"
-            >
-              WhatsApp (+62 812 3456 7890)
-            </a>
-          </p>
+          {venuePhone && (
+            <p className="text-[11px] text-gray-500 text-center block pt-2">
+              Kendala akses saat di lokasi? Hubungi tim meja depan via{" "}
+              {waDigits.length >= 8 ? (
+                <a
+                  href={`https://wa.me/${waDigits}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#5E43F3] font-bold hover:underline"
+                >
+                  WhatsApp ({venuePhone})
+                </a>
+              ) : (
+                <span className="font-bold">{venuePhone}</span>
+              )}
+            </p>
+          )}
         </div>
 
         {/* ─── FOOTER REVEAL HINT PILL (PETUNJUK KETIKA MENTOK DI BAWAH) ─── */}
