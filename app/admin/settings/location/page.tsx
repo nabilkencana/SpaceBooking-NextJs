@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -29,36 +29,136 @@ import {
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ApiRequestError,
+  type ApiError,
+  type ApiErrorData,
+} from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  useLocationProfile,
+  useUpdateLocationProfile,
+} from "@/hooks/useAdmin";
 import AdminPageTransition from "@/components/admin/AdminPageTransition";
 import { CountUp } from "@/hooks/useCountUp";
 
-// ─── INITIAL PROFILE VALUES (PERSIS REFERENSI DESAIN) ────────────────────────────
-const INITIAL_DATA = {
-  namaCoworking: "Moklet Hub Coworking Space",
-  namaPemilik: "Ahmad Bidin, S.Kom",
-  nomorTelepon: "081298765432",
-  alamatGedung:
-    "Jl. Danau Ranau No. 01, Sawojajar, Kedungkandang, Kota Malang, Jawa Timur 65139",
-  koordinatLat: "-7.9784",
-  koordinatLng: "112.6572",
-  deskripsiFasilitas:
-    "Ruang kerja modern ramah digital nomad dan tim rintisan di kawasan Sawojajar Malang. Dilengkapi koneksi fiber optic 100Mbps dedicated SLA, ruang rapat kedap suara, area komunal outdoor beratap, dan free flow kopi lokal berkualitas.",
-  lastUpdated: "30 Agustus 2026 pukul 08:36 WIB",
-};
+/** Backend 4xx envelopes arrive as AxiosError via the BFF proxy. */
+function getApiErrorMessage(err: unknown): string {
+  if (
+    err &&
+    typeof err === "object" &&
+    "isAxiosError" in err &&
+    (err as { isAxiosError?: boolean }).isAxiosError
+  ) {
+    const body = (err as { response?: { data?: unknown } }).response?.data as
+      | ApiError
+      | undefined;
+    if (body?.message) return body.message;
+  }
+  if (err instanceof ApiRequestError) return err.message;
+  return err instanceof Error ? err.message : "Terjadi kesalahan. Coba lagi.";
+}
+
+/** Field-level 422 messages keyed by backend attribute name (snake_case). */
+function getApiFieldErrors(err: unknown): Partial<Record<string, string[]>> {
+  if (
+    err &&
+    typeof err === "object" &&
+    "isAxiosError" in err &&
+    (err as { isAxiosError?: boolean }).isAxiosError
+  ) {
+    const body = (err as { response?: { data?: unknown } }).response?.data as
+      | (ApiError & { data?: ApiErrorData })
+      | undefined;
+    if (body?.data && typeof body.data === "object") return body.data;
+  }
+  return {};
+}
+
+// ─── MODEL FORMULIR LOKAL (ISI DARI GET /admin/profile) ─────────────────────────
+interface LocationFormData {
+  nama_coworking: string;
+  nama_pemilik: string;
+  telp: string;
+  hotline: string;
+  alamat: string;
+  deskripsi: string;
+  latitude: string;
+  longitude: string;
+  is_public: boolean;
+}
+
+const LAT_MIN = -90;
+const LAT_MAX = 90;
+const LNG_MIN = -180;
+const LNG_MAX = 180;
+
+function toNumberOrNull(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatUpdatedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  })} pukul ${date.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  })} WIB`;
+}
 
 export default function AdminLocationSettingsPage() {
   const router = useRouter();
   const { user, logout } = useAuth();
 
   // Form states
-  const [formData, setFormData] = useState(INITIAL_DATA);
-  const [isSaving, setIsSaving] = useState(false);
+  const [formData, setFormData] = useState<LocationFormData>({
+    nama_coworking: "",
+    nama_pemilik: "",
+    telp: "",
+    hotline: "",
+    alamat: "",
+    deskripsi: "",
+    latitude: "",
+    longitude: "",
+    is_public: true,
+  });
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
-  const [lastUpdatedDisplay, setLastUpdatedDisplay] = useState(
-    INITIAL_DATA.lastUpdated
-  );
+  const [lastUpdatedDisplay, setLastUpdatedDisplay] = useState("—");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  const {
+    data: profile,
+    isLoading: isProfileLoading,
+    isError: isProfileError,
+    refetch: refetchProfile,
+  } = useLocationProfile();
+  const updateLocationProfile = useUpdateLocationProfile();
+  const isSaving = updateLocationProfile.isPending;
+
+  useEffect(() => {
+    if (!profile) return;
+    setFormData({
+      nama_coworking: profile.nama_coworking,
+      nama_pemilik: profile.nama_pemilik,
+      telp: profile.telp,
+      hotline: profile.hotline ?? "",
+      alamat: profile.alamat,
+      deskripsi: profile.deskripsi,
+      latitude: profile.latitude ?? "",
+      longitude: profile.longitude ?? "",
+      is_public: profile.is_public,
+    });
+    setLastUpdatedDisplay(formatUpdatedAt(profile.updated_at));
+  }, [profile]);
 
   // Identitas Admin
   const adminName =
@@ -75,7 +175,7 @@ export default function AdminLocationSettingsPage() {
     .toUpperCase();
 
   // Character count calculation
-  const charCount = formData.deskripsiFasilitas.length;
+  const charCount = formData.deskripsi.length;
   const maxChars = 500;
 
   // Handlers
@@ -88,46 +188,80 @@ export default function AdminLocationSettingsPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.namaCoworking.trim()) {
+    if (!formData.nama_coworking.trim()) {
       toast.error("Nama Coworking Space tidak boleh kosong.");
       return;
     }
-    if (!formData.alamatGedung.trim()) {
+    if (!formData.alamat.trim()) {
       toast.error("Alamat lengkap gedung tidak boleh kosong.");
       return;
     }
 
-    setIsSaving(true);
+    const lat = toNumberOrNull(formData.latitude);
+    if (lat !== null && (lat < LAT_MIN || lat > LAT_MAX)) {
+      toast.error(`Latitude harus di antara ${LAT_MIN} dan ${LAT_MAX}.`);
+      return;
+    }
+    const lng = toNumberOrNull(formData.longitude);
+    if (lng !== null && (lng < LNG_MIN || lng > LNG_MAX)) {
+      toast.error(`Longitude harus di antara ${LNG_MIN} dan ${LNG_MAX}.`);
+      return;
+    }
+
     setIsSavedSuccess(false);
 
-    // 600ms spinner per project directive, then green checkmark
-    setTimeout(() => {
-      setIsSaving(false);
-      setIsSavedSuccess(true);
-      const now = new Date();
-      const formattedDate = `${now.toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })} pukul ${now.toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })} WIB`;
-      setLastUpdatedDisplay(formattedDate);
-      toast.success(
-        `Profil dan informasi lokasi "${formData.namaCoworking}" berhasil diperbarui!`
-      );
-
-      // Revert success state to normal after 1.8s
-      setTimeout(() => {
-        setIsSavedSuccess(false);
-      }, 1800);
-    }, 600);
+    updateLocationProfile.mutate(
+      {
+        nama_coworking: formData.nama_coworking.trim(),
+        nama_pemilik: formData.nama_pemilik.trim(),
+        telp: formData.telp.trim(),
+        hotline: formData.hotline.trim() || null,
+        alamat: formData.alamat.trim(),
+        deskripsi: formData.deskripsi,
+        latitude: lat,
+        longitude: lng,
+        is_public: formData.is_public,
+      },
+      {
+        onSuccess: (updated) => {
+          setIsSavedSuccess(true);
+          setLastUpdatedDisplay(formatUpdatedAt(updated.updated_at));
+          toast.success(
+            `Profil dan informasi lokasi "${updated.nama_coworking}" berhasil diperbarui!`
+          );
+          setTimeout(() => {
+            setIsSavedSuccess(false);
+          }, 1800);
+        },
+        onError: (err) => {
+          toast.error(getApiErrorMessage(err));
+          const fieldErrors = getApiFieldErrors(err);
+          if (fieldErrors.latitude?.length) {
+            toast.error(`Latitude: ${fieldErrors.latitude[0]}`);
+          } else if (fieldErrors.longitude?.length) {
+            toast.error(`Longitude: ${fieldErrors.longitude[0]}`);
+          }
+        },
+      }
+    );
   };
 
   const handleReset = () => {
-    setFormData(INITIAL_DATA);
-    toast.info("Formulir pengaturan lokasi telah direset ke nilai awal.");
+    if (profile) {
+      setFormData({
+        nama_coworking: profile.nama_coworking,
+        nama_pemilik: profile.nama_pemilik,
+        telp: profile.telp,
+        hotline: profile.hotline ?? "",
+        alamat: profile.alamat,
+        deskripsi: profile.deskripsi,
+        latitude: profile.latitude ?? "",
+        longitude: profile.longitude ?? "",
+        is_public: profile.is_public,
+      });
+      setLastUpdatedDisplay(formatUpdatedAt(profile.updated_at));
+    }
+    toast.info("Formulir pengaturan lokasi telah direset ke nilai tersimpan.");
   };
 
   const handleLogout = async () => {
@@ -299,6 +433,31 @@ export default function AdminLocationSettingsPage() {
       {/* ─── 3. SISI KANAN: WORKSPACE KONTEN UTAMA ─────────────────────────────── */}
       <main className="flex-1 min-w-0 p-6 sm:p-8 xl:p-10 space-y-7 overflow-y-auto mt-14 lg:mt-0">
         <AdminPageTransition pageKey="location-settings">
+        {isProfileLoading && (
+          <div className="bg-white rounded-3xl border border-[#E5E7EB] shadow-xs p-10 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="w-6 h-6 animate-spin text-[#5E43F3]" />
+            <span className="text-sm text-gray-500 font-medium">
+              Memuat profil lokasi...
+            </span>
+          </div>
+        )}
+
+        {isProfileError && (
+          <div className="bg-white rounded-3xl border border-[#E5E7EB] shadow-xs p-10 flex flex-col items-center justify-center gap-3">
+            <span className="text-sm text-gray-600 font-medium">
+              Gagal memuat profil lokasi. Coba muat ulang.
+            </span>
+            <button
+              type="button"
+              onClick={() => refetchProfile()}
+              className="text-xs font-semibold text-white bg-[#5E43F3] hover:bg-[#4A32D6] px-4 py-2 rounded-xl transition-colors cursor-pointer"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        )}
+
+        {!isProfileLoading && !isProfileError && (
         <form onSubmit={handleSave} className="space-y-7">
           {/* A. HEADER HALAMAN & GLOBAL ACTIONS */}
           <header className="admin-header-animate flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -313,7 +472,7 @@ export default function AdminLocationSettingsPage() {
 
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || isProfileLoading}
               className={`text-white text-xs sm:text-sm font-semibold px-5 py-3 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer self-start sm:self-auto shrink-0 disabled:opacity-80 ${
                 isSavedSuccess
                   ? "bg-emerald-600 hover:bg-emerald-700"
@@ -350,15 +509,17 @@ export default function AdminLocationSettingsPage() {
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
                   STATUS VISIBILITAS
                 </span>
-                <Eye className="w-4 h-4 text-emerald-500" />
+                <Eye className={`w-4 h-4 ${formData.is_public ? "text-emerald-500" : "text-gray-400"}`} />
               </div>
               <div className="my-3">
-                <span className="text-xl sm:text-2xl font-bold text-emerald-600 tracking-tight">
-                  Publik & Aktif
+                <span className={`text-xl sm:text-2xl font-bold tracking-tight ${formData.is_public ? "text-emerald-600" : "text-gray-500"}`}>
+                  {formData.is_public ? "Publik & Aktif" : "Privat / Tersembunyi"}
                 </span>
               </div>
               <span className="text-xs text-gray-400 font-medium mt-2">
-                Dapat dicari dan dibooking di katalog member
+                {formData.is_public
+                  ? "Dapat dicari dan dibooking di katalog member"
+                  : "Profil disembunyikan dari footer publik dan katalog member"}
               </span>
             </div>
 
@@ -390,7 +551,7 @@ export default function AdminLocationSettingsPage() {
               </div>
               <div className="my-3">
                 <span className="text-xl sm:text-2xl font-black text-[#111827] tracking-tight truncate">
-                  Moklet Hub Coworking
+                  {formData.nama_coworking || "—"}
                 </span>
               </div>
               <span className="text-xs font-semibold text-[#111827]/90 mt-2">
@@ -415,8 +576,8 @@ export default function AdminLocationSettingsPage() {
                 <input
                   type="text"
                   required
-                  name="namaCoworking"
-                  value={formData.namaCoworking}
+                  name="nama_coworking"
+                  value={formData.nama_coworking}
                   onChange={handleChange}
                   placeholder="Moklet Hub Coworking Space"
                   className="w-full text-sm rounded-xl p-3 border border-gray-200 bg-white font-medium text-[#111827] focus:outline-none focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 transition-all"
@@ -435,8 +596,8 @@ export default function AdminLocationSettingsPage() {
                 <input
                   type="text"
                   required
-                  name="namaPemilik"
-                  value={formData.namaPemilik}
+                  name="nama_pemilik"
+                  value={formData.nama_pemilik}
                   onChange={handleChange}
                   placeholder="Ahmad Bidin, S.Kom"
                   className="w-full text-sm rounded-xl p-3 border border-gray-200 bg-white font-medium text-[#111827] focus:outline-none focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 transition-all"
@@ -446,28 +607,40 @@ export default function AdminLocationSettingsPage() {
                 </span>
               </div>
 
-              {/* Field 3: Nomor Telepon / Hotline */}
+              {/* Field 3: Nomor Telepon Pengelola */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  NOMOR TELEPON / HOTLINE FRONT-DESK{" "}
-                  <span className="text-red-500">*</span>
+                  NOMOR TELEPON PENGELOLA <span className="text-red-500">*</span>
                 </label>
-                <div className="relative flex items-center border border-gray-200 rounded-xl overflow-hidden focus-within:border-[#5E43F3] focus-within:ring-2 focus-within:ring-[#5E43F3]/20 transition-all">
-                  <span className="px-3.5 py-3 text-sm text-gray-400 font-mono font-medium border-r border-gray-200 bg-gray-50/60 select-none">
-                    +62
-                  </span>
-                  <input
-                    type="tel"
-                    required
-                    name="nomorTelepon"
-                    value={formData.nomorTelepon}
-                    onChange={handleChange}
-                    placeholder="081298765432"
-                    className="flex-1 p-3 text-sm font-mono text-[#111827] bg-white focus:outline-none"
-                  />
-                </div>
+                <input
+                  type="tel"
+                  required
+                  name="telp"
+                  value={formData.telp}
+                  onChange={handleChange}
+                  placeholder="081298765432"
+                  className="w-full text-sm rounded-xl p-3 border border-gray-200 bg-white font-mono font-medium text-[#111827] focus:outline-none focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 transition-all"
+                />
                 <span className="text-[11px] text-gray-400 mt-1.5 block">
-                  Digunakan untuk konfirmasi WhatsApp tiket masuk dan kendala lapangan.
+                  Kontak utama pengelola untuk administrasi dan konfirmasi reservasi.
+                </span>
+              </div>
+
+              {/* Field 4: Hotline Front-Desk */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  HOTLINE FRONT-DESK
+                </label>
+                <input
+                  type="tel"
+                  name="hotline"
+                  value={formData.hotline}
+                  onChange={handleChange}
+                  placeholder="+6281298765432"
+                  className="w-full text-sm rounded-xl p-3 border border-gray-200 bg-white font-mono font-medium text-[#111827] focus:outline-none focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 transition-all"
+                />
+                <span className="text-[11px] text-gray-400 mt-1.5 block">
+                  Nomor meja depan yang tampil publik untuk bantuan kendala lapangan. Kosongkan jika tidak tersedia.
                 </span>
               </div>
             </div>
@@ -486,8 +659,8 @@ export default function AdminLocationSettingsPage() {
                 <textarea
                   rows={4}
                   required
-                  name="alamatGedung"
-                  value={formData.alamatGedung}
+                  name="alamat"
+                  value={formData.alamat}
                   onChange={handleChange}
                   placeholder="Jl. Danau Ranau No. 01, Sawojajar, Kedungkandang, Kota Malang, Jawa Timur 65139"
                   className="w-full text-sm rounded-xl p-3 border border-gray-200 bg-white font-medium text-[#111827] focus:outline-none focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 transition-all resize-none leading-relaxed"
@@ -497,24 +670,58 @@ export default function AdminLocationSettingsPage() {
                 </span>
               </div>
 
-              {/* Field 2: Koordinat Peta Terverifikasi */}
-              <div className="flex items-center gap-4 bg-gray-50/80 border border-gray-200 rounded-2xl p-4 mt-6 shadow-xs">
-                <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#5E43F3] flex items-center justify-center shrink-0">
-                  <MapPin className="w-5 h-5 text-[#5E43F3]" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs font-bold text-[#111827] block">
-                    Koordinat Peta Terverifikasi
-                  </span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs font-mono font-black text-gray-800 tracking-wider">
-                      {formData.koordinatLat}, {formData.koordinatLng}
+              {/* Field 2: Koordinat Peta (Latitude / Longitude) */}
+              <div className="bg-gray-50/80 border border-gray-200 rounded-2xl p-4 mt-6 shadow-xs space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#5E43F3] flex items-center justify-center shrink-0">
+                    <MapPin className="w-5 h-5 text-[#5E43F3]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-[#111827] block">
+                      Koordinat Peta Terverifikasi
+                    </span>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">
+                      Presisi 7 desimal, dipakai untuk penunjuk arah rute member
                     </span>
                   </div>
-                  <span className="text-[10px] text-gray-400 block mt-0.5">
-                    (Terkoneksi langsung ke penunjuk arah rute Google Maps bagi member)
-                  </span>
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                      LATITUDE (−90 s/d 90)
+                    </label>
+                    <input
+                      type="number"
+                      name="latitude"
+                      value={formData.latitude}
+                      onChange={handleChange}
+                      step={0.0000001}
+                      min={LAT_MIN}
+                      max={LAT_MAX}
+                      placeholder="-7.9784"
+                      className="w-full text-sm rounded-xl p-3 border border-gray-200 bg-white font-mono font-medium text-[#111827] focus:outline-none focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                      LONGITUDE (−180 s/d 180)
+                    </label>
+                    <input
+                      type="number"
+                      name="longitude"
+                      value={formData.longitude}
+                      onChange={handleChange}
+                      step={0.0000001}
+                      min={LNG_MIN}
+                      max={LNG_MAX}
+                      placeholder="112.6572"
+                      className="w-full text-sm rounded-xl p-3 border border-gray-200 bg-white font-mono font-medium text-[#111827] focus:outline-none focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 transition-all"
+                    />
+                  </div>
+                </div>
+                <span className="text-[11px] text-gray-400 block">
+                  Kosongkan keduanya jika lokasi belum diverifikasi secara geografis.
+                </span>
               </div>
             </div>
           </section>
@@ -539,8 +746,8 @@ export default function AdminLocationSettingsPage() {
                 rows={5}
                 required
                 maxLength={maxChars}
-                name="deskripsiFasilitas"
-                value={formData.deskripsiFasilitas}
+                name="deskripsi"
+                value={formData.deskripsi}
                 onChange={handleChange}
                 placeholder="Ruang kerja modern ramah digital nomad dan tim rintisan di kawasan Sawojajar Malang..."
                 className="w-full text-sm rounded-xl p-3.5 border border-gray-200 bg-white font-medium text-[#111827] focus:outline-none focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 transition-all resize-y leading-relaxed"
@@ -563,6 +770,42 @@ export default function AdminLocationSettingsPage() {
                   {charCount} / {maxChars} Karakter
                 </span>
               </div>
+            </div>
+
+            {/* Visibilitas Publik */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-gray-50/80 p-4 shadow-xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${formData.is_public ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-400"}`}>
+                  <Eye className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-[#111827] block">
+                    Tampilkan Profil Secara Publik
+                  </span>
+                  <span className="text-[10px] text-gray-400 block mt-0.5">
+                    Nama, alamat, dan hotline tampil pada footer publik serta katalog member
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={formData.is_public}
+                aria-label="Tampilkan Profil Secara Publik"
+                onClick={() =>
+                  setFormData((prev) => ({ ...prev, is_public: !prev.is_public }))
+                }
+                disabled={isProfileLoading || isSaving}
+                className={`relative w-11 h-6 rounded-full shrink-0 transition-colors cursor-pointer disabled:opacity-60 ${
+                  formData.is_public ? "bg-[#5E43F3]" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    formData.is_public ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
             </div>
           </section>
 
@@ -588,7 +831,7 @@ export default function AdminLocationSettingsPage() {
 
               <button
                 type="submit"
-                disabled={isSaving}
+                disabled={isSaving || isProfileLoading}
                 className={`text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center gap-2 cursor-pointer disabled:opacity-80 ${
                   isSavedSuccess
                     ? "bg-emerald-600 hover:bg-emerald-700"
@@ -615,6 +858,7 @@ export default function AdminLocationSettingsPage() {
             </div>
           </footer>
         </form>
+        )}
         </AdminPageTransition>
       </main>
     </div>
