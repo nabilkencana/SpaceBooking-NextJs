@@ -250,7 +250,7 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
         {/* A. Top Action & API Reference Bar */}
         <div className="max-w-2xl mx-auto mb-5 flex items-center justify-between w-full print:hidden">
           <Link
-            href="/reservasi"
+            href="/reservations"
             className="text-xs font-semibold text-gray-500 hover:text-black transition-colors flex items-center gap-1.5"
           >
             <ArrowLeft className="w-3.5 h-3.5" />

@@ -56,7 +56,7 @@ export default function AdminRegisterPage() {
         ...values,
       });
       toast.success("Registrasi berhasil!");
-      router.replace("/admin/dashboard");
+      router.replace("/admin");
     } catch (e) {
       if (e instanceof ApiRequestError) {
         toast.error(e.message || "Registrasi gagal");

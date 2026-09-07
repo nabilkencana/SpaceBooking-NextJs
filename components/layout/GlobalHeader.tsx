@@ -113,7 +113,7 @@ export function GlobalHeader({ isLoggedIn }: GlobalHeaderProps = {}) {
       return pathname.startsWith("/spaces");
     }
     if (href === "/reservations") {
-      return pathname.startsWith("/reservations") || pathname.startsWith("/reservasi");
+      return pathname.startsWith("/reservations");
     }
     if (href.startsWith("/admin/")) {
       return pathname.startsWith(href);

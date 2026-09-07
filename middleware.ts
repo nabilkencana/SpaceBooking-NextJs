@@ -4,16 +4,14 @@ import type { NextRequest } from "next/server";
 const TOKEN_COOKIE = "sb_token";
 const ROLE_COOKIE = "sb_role";
 
-const MEMBER_HOME = "/reservasi";
-const ADMIN_HOME = "/admin/dashboard";
+const MEMBER_HOME = "/reservations";
+const ADMIN_HOME = "/admin";
 
 const PUBLIC_PATHS = new Set([
   "/",
   "/login",
   "/register",
   "/spaces",
-  "/reservations",
-  "/admin",
   "/auth/login",
   "/auth/register",
 ]);
@@ -22,8 +20,6 @@ function isPublic(path: string): boolean {
   if (PUBLIC_PATHS.has(path)) return true;
   if (path.startsWith("/spaces/")) return true;
   if (path.startsWith("/api/")) return true;
-  if (path.startsWith("/admin")) return true;
-  if (path.startsWith("/reservations")) return true;
   return false;
 }
 
@@ -33,7 +29,7 @@ type ProtectedGroup = {
 };
 
 const PROTECTED_GROUPS: ProtectedGroup[] = [
-  { paths: ["/booking", "/reservasi", "/member", "/my"], allowedRole: "member" },
+  { paths: ["/reservations", "/member", "/my"], allowedRole: "member" },
   { paths: ["/admin", "/dashboard", "/panel"], allowedRole: "admin_space" },
 ];
 
@@ -87,8 +83,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/booking/:path*",
-    "/reservasi/:path*",
+    "/reservations/:path*",
     "/admin/:path*",
     "/dashboard/:path*",
     "/member/:path*",

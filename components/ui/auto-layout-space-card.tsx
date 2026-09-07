@@ -25,6 +25,7 @@ export interface SpaceData {
   coverImage: string;
   galleryImages: [string, string, string];
   fasilitas: string[];
+  slug?: string;
 }
 
 // Pegas kritis (critically damped) agar animasi buka & tutup bebas loncatan (zero jitter/overshoot)
@@ -230,7 +231,7 @@ export const AutoLayoutSpaceCard = React.forwardRef<HTMLDivElement, AutoLayoutSp
           </span>
 
           <Link
-            href={`/booking/${space.id}`}
+            href={`/spaces/${space.slug ?? space.id}`}
             className="inline-flex items-center gap-1.5 bg-[#5E43F3] hover:bg-[#4A32D6] text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors shadow-sm"
           >
             <span>Pesan Meja Ini</span>

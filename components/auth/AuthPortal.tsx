@@ -125,9 +125,9 @@ export default function AuthPortal({ initialMode = "login" }: AuthPortalProps) {
       toast.success("Berhasil masuk!");
 
       if (user.role === "admin_space") {
-        router.replace("/admin/dashboard");
+        router.replace("/admin");
       } else {
-        router.replace("/reservasi");
+        router.replace("/reservations");
       }
     } catch (err) {
       if (err instanceof ApiRequestError) {
@@ -203,7 +203,7 @@ export default function AuthPortal({ initialMode = "login" }: AuthPortalProps) {
       });
 
       toast.success("Pendaftaran berhasil! Selamat datang di Urspace.");
-      router.replace("/reservasi");
+      router.replace("/reservations");
     } catch (err) {
       if (err instanceof ApiRequestError) {
         toast.error(err.message || "Pendaftaran gagal, periksa kembali formulir Anda.");
