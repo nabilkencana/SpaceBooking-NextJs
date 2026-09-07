@@ -128,10 +128,18 @@ export default function WorkspaceDetailBooking({
   const { isAuthenticated, isLoading: authLoading } = useAuthContext();
 
   // ─── Live gallery: space.photos (fallback foto_url), placeholder bila kosong ───
+  // Seeded/legacy paths may lack the leading slash ("spaces/x.jpg"); next/image
+  // hard-throws on such src, so normalize before rendering.
   const galleryImages: GalleryImage[] = useMemo(() => {
-    const photos = (space.photos ?? []).filter(Boolean);
+    const toImageSrc = (url: string) =>
+      url.startsWith("/") || url.startsWith("http") ? url : `/${url}`;
+    const photos = (space.photos ?? []).filter(Boolean).map(toImageSrc);
     const urls =
-      photos.length > 0 ? photos : space.foto_url ? [space.foto_url] : [];
+      photos.length > 0
+        ? photos
+        : space.foto_url
+          ? [toImageSrc(space.foto_url)]
+          : [];
     if (urls.length === 0) {
       return [{ id: "placeholder", label: space.nama_space, url: null }];
     }
