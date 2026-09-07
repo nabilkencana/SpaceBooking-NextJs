@@ -1,21 +1,15 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import {
   BarChart3,
   Building2,
   CalendarCheck,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  Edit2,
-  Info,
   Layers,
   LayoutGrid,
-  LogOut,
   Menu,
   Plus,
   Search,
@@ -29,299 +23,54 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  useAdminMembers,
+  useCreateMember,
+  useUpdateMember,
+  useDeleteMember,
+  usePendingCount,
+  type UpdateMemberPayload,
+} from "@/hooks/useAdmin";
+import { ApiRequestError, type ApiError } from "@/lib/api";
+import type { Member } from "@/types";
 import AdminPageTransition from "@/components/admin/AdminPageTransition";
 import { CountUp } from "@/hooks/useCountUp";
 
-// ─── TYPES & INTERFACES ──────────────────────────────────────────────────────────
-export type MemberStatus =
-  | "Aktif di Ruangan"
-  | "Reservasi Hari Ini"
-  | "Tidak Aktif";
+// ─── TYPES & HELPERS ────────────────────────────────────────────────────────────
+// MemberResource belum mengekspos username (milik relasi user) — kolom dirender
+// kondisional dan otomatis terisi begitu resource backend menambahkannya.
+type MemberRow = Member & { username?: string };
 
-export type FilterTab =
-  | "Semua"
-  | "Aktif di Ruangan"
-  | "Reservasi Hari Ini";
-
-export interface MemberItem {
-  id: number;
-  nama: string;
-  username: string;
-  instansi: string;
-  telepon: string;
-  alamat: string;
-  status: MemberStatus;
-  memberSejak: string;
-  avatarText?: string;
+/** Backend 4xx envelopes arrive as AxiosError via the BFF proxy. */
+function getErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const body = err.response?.data as ApiError | undefined;
+    if (body?.message) return body.message;
+  }
+  if (err instanceof ApiRequestError) return err.message;
+  return err instanceof Error ? err.message : "Terjadi kesalahan. Coba lagi.";
 }
 
-// ─── INITIAL MEMBERS DATA (PERSIS GAMBAR REFERENSI & METRIK 24 MEMBER) ───────────
-const INITIAL_MEMBERS: MemberItem[] = [
-  {
-    id: 1,
-    nama: "Budi Raharjo",
-    username: "budi.member",
-    instansi: "SMK Telkom Malang",
-    telepon: "0857-1234-5678",
-    alamat: "Jl. Danau Ranau No. 1, Sawojajar, Malang",
-    status: "Aktif di Ruangan",
-    memberSejak: "12 Jan 2026",
-    avatarText: "BR",
-  },
-  {
-    id: 2,
-    nama: "Siti Nurhaliza",
-    username: "siti.member",
-    instansi: "Universitas Brawijaya",
-    telepon: "0857-1234-9900",
-    alamat: "Jl. MT Haryono No. 169, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "03 Feb 2026",
-    avatarText: "SN",
-  },
-  {
-    id: 3,
-    nama: "John Doe",
-    username: "johndoe",
-    instansi: "PT Inovasi Digital",
-    telepon: "0812-3456-7890",
-    alamat: "Jl. Sudirman No. 123, Jakarta Selatan",
-    status: "Tidak Aktif",
-    memberSejak: "18 Nov 2025",
-    avatarText: "JD",
-  },
-  {
-    id: 4,
-    nama: "Amanda Putri",
-    username: "amanda.putri",
-    instansi: "Nusantara Creative Lab",
-    telepon: "0813-8899-7711",
-    alamat: "Jl. Ijen Boulevard No. 45, Malang",
-    status: "Aktif di Ruangan",
-    memberSejak: "05 Jan 2026",
-    avatarText: "AP",
-  },
-  {
-    id: 5,
-    nama: "Rian Hidayat",
-    username: "rian.nomad",
-    instansi: "Remote Software Dev",
-    telepon: "0821-4455-6677",
-    alamat: "Jl. Soekarno Hatta No. 88, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "19 Des 2025",
-    avatarText: "RH",
-  },
-  {
-    id: 6,
-    nama: "Dimas Anggara",
-    username: "dimas.dev",
-    instansi: "GoTo Financial Malang",
-    telepon: "0812-9988-1122",
-    alamat: "Jl. Candi Mendut No. 14, Lowokwaru, Malang",
-    status: "Aktif di Ruangan",
-    memberSejak: "10 Feb 2026",
-    avatarText: "DA",
-  },
-  {
-    id: 7,
-    nama: "Clarissa Dewi",
-    username: "clarissa.design",
-    instansi: "Studio UX Nusantara",
-    telepon: "0856-7788-3344",
-    alamat: "Jl. Simpang Wilis No. 9, Klojen, Malang",
-    status: "Aktif di Ruangan",
-    memberSejak: "15 Jan 2026",
-    avatarText: "CD",
-  },
-  {
-    id: 8,
-    nama: "Fajar Pratama",
-    username: "fajar.startup",
-    instansi: "PT Tech Edukasi Asia",
-    telepon: "0822-6677-8899",
-    alamat: "Jl. Bunga Cengkeh No. 23, Jatimulyo, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "22 Jan 2026",
-    avatarText: "FP",
-  },
-  {
-    id: 9,
-    nama: "Nadia Safira",
-    username: "nadia.safira",
-    instansi: "Politeknik Negeri Malang",
-    telepon: "0819-3322-1144",
-    alamat: "Jl. Kawi No. 34, Kauman, Malang",
-    status: "Aktif di Ruangan",
-    memberSejak: "28 Jan 2026",
-    avatarText: "NS",
-  },
-  {
-    id: 10,
-    nama: "Hendra Gunawan",
-    username: "hendra.gunawan",
-    instansi: "East Java Venture Lab",
-    telepon: "0811-2233-4455",
-    alamat: "Jl. Dieng No. 56, Gading Kasri, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "02 Feb 2026",
-    avatarText: "HG",
-  },
-  {
-    id: 11,
-    nama: "Maya Kusuma",
-    username: "maya.writer",
-    instansi: "Freelance Copywriter Hub",
-    telepon: "0877-6655-4433",
-    alamat: "Jl. Sigura-gura No. 12, Sumbersari, Malang",
-    status: "Aktif di Ruangan",
-    memberSejak: "08 Jan 2026",
-    avatarText: "MK",
-  },
-  {
-    id: 12,
-    nama: "Bambang Pamungkas",
-    username: "bambang.p",
-    instansi: "Agro Tech Digital",
-    telepon: "0813-2211-9988",
-    alamat: "Jl. Bendungan Sutami No. 40, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "14 Jan 2026",
-    avatarText: "BP",
-  },
-  {
-    id: 13,
-    nama: "Ayu Lestari",
-    username: "ayu.lestari",
-    instansi: "Universitas Negeri Malang",
-    telepon: "0858-1122-3344",
-    alamat: "Jl. Surabaya No. 6, Klojen, Malang",
-    status: "Aktif di Ruangan",
-    memberSejak: "19 Jan 2026",
-    avatarText: "AL",
-  },
-  {
-    id: 14,
-    nama: "Rizky Ramadhan",
-    username: "rizky.ramadhan",
-    instansi: "SMK Telkom Malang",
-    telepon: "0856-4433-2211",
-    alamat: "Jl. Danau Toba No. 18, Sawojajar, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "25 Jan 2026",
-    avatarText: "RR",
-  },
-  {
-    id: 15,
-    nama: "Santi Wijaya",
-    username: "santi.wijaya",
-    instansi: "PT Media Nusantara Prima",
-    telepon: "0812-7788-9900",
-    alamat: "Jl. Pahlawan Trip No. 5, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "30 Jan 2026",
-    avatarText: "SW",
-  },
-  {
-    id: 16,
-    nama: "Kevin Sanjaya",
-    username: "kevin.nomad",
-    instansi: "Remote Software Dev",
-    telepon: "0823-1122-3344",
-    alamat: "Jl. Bondowoso No. 22, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "04 Feb 2026",
-    avatarText: "KS",
-  },
-  {
-    id: 17,
-    nama: "Indah Permatasari",
-    username: "indah.permatasari",
-    instansi: "Nusantara Creative Lab",
-    telepon: "0813-5566-7788",
-    alamat: "Jl. Galunggung No. 17, Gading Kasri, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "09 Feb 2026",
-    avatarText: "IP",
-  },
-  {
-    id: 18,
-    nama: "Arif Kurniawan",
-    username: "arif.kurniawan",
-    instansi: "East Java Venture Lab",
-    telepon: "0857-8899-0011",
-    alamat: "Jl. Terusan Dieng No. 8, Sukun, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "12 Feb 2026",
-    avatarText: "AK",
-  },
-  {
-    id: 19,
-    nama: "Putri Maharani",
-    username: "putri.maharani",
-    instansi: "Universitas Brawijaya",
-    telepon: "0812-3344-5566",
-    alamat: "Jl. Veteran Blok C-2, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "15 Feb 2026",
-    avatarText: "PM",
-  },
-  {
-    id: 20,
-    nama: "Teguh Santoso",
-    username: "teguh.santoso",
-    instansi: "PT Inovasi Digital",
-    telepon: "0821-9988-7766",
-    alamat: "Jl. Jakarta No. 19, Penanggungan, Malang",
-    status: "Reservasi Hari Ini",
-    memberSejak: "18 Feb 2026",
-    avatarText: "TS",
-  },
-  {
-    id: 21,
-    nama: "Fitri Handayani",
-    username: "fitri.handayani",
-    instansi: "Startup Nomad Remote",
-    telepon: "0878-1122-3344",
-    alamat: "Jl. Bandung No. 11, Klojen, Malang",
-    status: "Tidak Aktif",
-    memberSejak: "01 Des 2025",
-    avatarText: "FH",
-  },
-  {
-    id: 22,
-    nama: "Wahyu Pratama",
-    username: "wahyu.pratama",
-    instansi: "Freelance Copywriter Hub",
-    telepon: "0813-4455-6677",
-    alamat: "Jl. Kaliurang No. 3, Lowokwaru, Malang",
-    status: "Tidak Aktif",
-    memberSejak: "11 Des 2025",
-    avatarText: "WP",
-  },
-  {
-    id: 23,
-    nama: "Dian Anggraini",
-    username: "dian.anggraini",
-    instansi: "PT Tech Edukasi Asia",
-    telepon: "0856-1122-3344",
-    alamat: "Jl. Semeru No. 42, Kauman, Malang",
-    status: "Tidak Aktif",
-    memberSejak: "20 Des 2025",
-    avatarText: "DA",
-  },
-  {
-    id: 24,
-    nama: "Agus Setiawan",
-    username: "agus.setiawan",
-    instansi: "Agro Tech Digital",
-    telepon: "0812-6677-8899",
-    alamat: "Jl. Borobudur No. 15, Mojolangu, Malang",
-    status: "Tidak Aktif",
-    memberSejak: "28 Des 2025",
-    avatarText: "AS",
-  },
-];
+function formatTanggal(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function initialsOf(name: string): string {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map((n) => n[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase();
+  return initials || "MB";
+}
 
 const ITEMS_PER_PAGE = 10;
 
@@ -329,27 +78,45 @@ export default function AdminMembersDirectoryPage() {
   const router = useRouter();
   const { user, logout } = useAuth();
 
-  // State operasional
-  const [members, setMembers] = useState<MemberItem[]>(INITIAL_MEMBERS);
+  // ─── LIVE DATA (GET /admin/members, search: nama_member/instansi/telp) ──────
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTab, setSelectedTab] = useState<FilterTab>("Semua");
   const [currentPage, setCurrentPage] = useState(1);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // Debounce 300ms: ketikan berhenti dulu baru query ke backend
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const membersQuery = useAdminMembers(searchQuery.trim() || undefined);
+  const members = (membersQuery.data ?? []) as MemberRow[];
+
+  // Mutasi CRUD
+  const createMember = useCreateMember();
+  const updateMember = useUpdateMember();
+  const deleteMember = useDeleteMember();
+  const pendingCountQuery = usePendingCount();
 
   // Modal Tambah Member Baru
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newNama, setNewNama] = useState("");
   const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [newInstansi, setNewInstansi] = useState("");
   const [newTelepon, setNewTelepon] = useState("");
   const [newAlamat, setNewAlamat] = useState("");
-  const [newStatus, setNewStatus] = useState<MemberStatus>("Aktif di Ruangan");
 
   // Modal Edit Member
-  const [editingMember, setEditingMember] = useState<MemberItem | null>(null);
+  const [editingMember, setEditingMember] = useState<MemberRow | null>(null);
+  const [editPassword, setEditPassword] = useState("");
 
   // Modal Konfirmasi Hapus Member
-  const [deletingMember, setDeletingMember] = useState<MemberItem | null>(null);
+  const [deletingMember, setDeletingMember] = useState<MemberRow | null>(null);
 
   // Identitas Admin
   const adminName =
@@ -358,56 +125,40 @@ export default function AdminMembersDirectoryPage() {
     user?.username ??
     "Ahmad Bidin";
   const adminRole = "Admin Pengelola";
-  const initials = adminName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .substring(0, 2)
-    .toUpperCase();
+  const initials = initialsOf(adminName);
 
-  // ─── METRIC COMPUTATIONS ─────────────────────────────────────────────────────
+  // ─── METRIC COMPUTATIONS (dari response server) ─────────────────────────────
   const totalMembersCount = members.length;
-  const activeInRoomCount = members.filter((m) => m.status === "Aktif di Ruangan").length;
-  const reservedTodayCount = members.filter((m) => m.status === "Reservasi Hari Ini").length;
-
   const totalOrganizationsCount = useMemo(() => {
     const orgs = new Set(members.map((m) => m.instansi.trim()));
     return orgs.size;
   }, [members]);
+  const now = new Date();
+  const newMembersThisMonthCount = useMemo(
+    () =>
+      members.filter((m) => {
+        const d = new Date(m.created_at);
+        return (
+          !Number.isNaN(d.getTime()) &&
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear()
+        );
+      }).length,
+    [members],
+  );
 
-  // ─── FILTER LOGIC ────────────────────────────────────────────────────────────
-  const filteredMembers = useMemo(() => {
-    return members.filter((m) => {
-      // Filter Tab
-      if (selectedTab === "Aktif di Ruangan" && m.status !== "Aktif di Ruangan") return false;
-      if (selectedTab === "Reservasi Hari Ini" && m.status !== "Reservasi Hari Ini") return false;
-
-      // Filter Search
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchNama = m.nama.toLowerCase().includes(q);
-        const matchUsername = m.username.toLowerCase().includes(q);
-        const matchInstansi = m.instansi.toLowerCase().includes(q);
-        const matchTelepon = m.telepon.toLowerCase().includes(q);
-        const matchAlamat = m.alamat.toLowerCase().includes(q);
-        if (!matchNama && !matchUsername && !matchInstansi && !matchTelepon && !matchAlamat) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [members, selectedTab, searchQuery]);
-
-  // ─── PAGINATION LOGIC ────────────────────────────────────────────────────────
-  const totalPages = Math.ceil(filteredMembers.length / ITEMS_PER_PAGE) || 1;
+  // ─── PAGINATION LOGIC (server belum mempage endpoint members) ───────────────
+  const totalPages = Math.ceil(members.length / ITEMS_PER_PAGE) || 1;
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
   const paginatedMembers = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredMembers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredMembers, currentPage]);
+    return members.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [members, currentPage]);
 
-  const startIndexDisplay = filteredMembers.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
-  const endIndexDisplay = Math.min(currentPage * ITEMS_PER_PAGE, filteredMembers.length);
+  const startIndexDisplay = members.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endIndexDisplay = Math.min(currentPage * ITEMS_PER_PAGE, members.length);
 
   // ─── HANDLERS ────────────────────────────────────────────────────────────────
   const handleAddMember = (e: React.FormEvent) => {
@@ -416,67 +167,80 @@ export default function AdminMembersDirectoryPage() {
       toast.error("Nama lengkap member wajib diisi.");
       return;
     }
+    if (newPassword.trim().length < 6) {
+      toast.error("Password minimal 6 karakter.");
+      return;
+    }
 
     const cleanUsername =
       newUsername.trim().toLowerCase().replace(/\s+/g, ".") ||
-      newNama.toLowerCase().replace(/\s+/g, ".");
+      newNama.trim().toLowerCase().replace(/\s+/g, ".");
 
-    const initialsArr = newNama
-      .trim()
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .substring(0, 2)
-      .toUpperCase();
-
-    const newMember: MemberItem = {
-      id: Date.now(),
-      nama: newNama.trim(),
-      username: cleanUsername,
-      instansi: newInstansi.trim() || "Independent Freelancer",
-      telepon: newTelepon.trim() || "0812-0000-0000",
-      alamat: newAlamat.trim() || "Kota Malang",
-      status: newStatus,
-      memberSejak: new Date().toLocaleDateString("id-ID", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }),
-      avatarText: initialsArr || "MB",
-    };
-
-    setMembers((prev) => [newMember, ...prev]);
-    toast.success(`Member "${newMember.nama}" berhasil ditambahkan ke direktori!`);
-
-    // Reset Form
-    setNewNama("");
-    setNewUsername("");
-    setNewInstansi("");
-    setNewTelepon("");
-    setNewAlamat("");
-    setIsAddModalOpen(false);
+    createMember.mutate(
+      {
+        username: cleanUsername,
+        password: newPassword.trim(),
+        nama_member: newNama.trim(),
+        instansi: newInstansi.trim(),
+        alamat: newAlamat.trim(),
+        telp: newTelepon.trim(),
+      },
+      {
+        onSuccess: (created) => {
+          toast.success(`Member "${created.nama_member}" berhasil ditambahkan ke direktori!`);
+          setNewNama("");
+          setNewUsername("");
+          setNewPassword("");
+          setNewInstansi("");
+          setNewTelepon("");
+          setNewAlamat("");
+          setIsAddModalOpen(false);
+        },
+        onError: (err) => toast.error(getErrorMessage(err)),
+      },
+    );
   };
 
   const handleUpdateMember = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMember) return;
 
-    setMembers((prev) =>
-      prev.map((m) => (m.id === editingMember.id ? editingMember : m))
+    const payload: UpdateMemberPayload = {
+      nama_member: editingMember.nama_member.trim(),
+      instansi: editingMember.instansi.trim(),
+      telp: editingMember.telp.trim(),
+      alamat: editingMember.alamat.trim(),
+    };
+    const username = editingMember.username?.trim();
+    if (username) payload.username = username;
+    if (editPassword.trim()) payload.password = editPassword.trim();
+
+    updateMember.mutate(
+      { id: editingMember.id, ...payload },
+      {
+        onSuccess: (updated) => {
+          toast.success(`Data member "${updated.nama_member}" berhasil diperbarui!`);
+          setEditingMember(null);
+          setEditPassword("");
+        },
+        onError: (err) => toast.error(getErrorMessage(err)),
+      },
     );
-    toast.success(`Data member "${editingMember.nama}" berhasil diperbarui!`);
-    setEditingMember(null);
   };
 
   const handleDeleteMember = () => {
     if (!deletingMember) return;
-    setMembers((prev) => prev.filter((m) => m.id !== deletingMember.id));
-    toast.success(`Member "${deletingMember.nama}" telah dihapus dari direktori.`);
-    setDeletingMember(null);
+    deleteMember.mutate(deletingMember.id, {
+      onSuccess: () => {
+        toast.success(`Member "${deletingMember.nama_member}" telah dihapus dari direktori.`);
+        setDeletingMember(null);
+      },
+      onError: (err) => toast.error(getErrorMessage(err)),
+    });
   };
 
   const handleExportCSV = () => {
-    if (filteredMembers.length === 0) {
+    if (members.length === 0) {
       toast.error("Tidak ada data member yang dapat diekspor.");
       return;
     }
@@ -488,19 +252,17 @@ export default function AdminMembersDirectoryPage() {
       "Instansi / Asal",
       "No. Telepon / WhatsApp",
       "Alamat Domisili",
-      "Status",
       "Member Sejak",
     ];
 
-    const csvRows = filteredMembers.map((m) => [
+    const csvRows = members.map((m) => [
       m.id,
-      `"${m.nama.replace(/"/g, '""')}"`,
-      `"${m.username}"`,
+      `"${m.nama_member.replace(/"/g, '""')}"`,
+      `"${m.username ?? "-"}"`,
       `"${m.instansi.replace(/"/g, '""')}"`,
-      `"${m.telepon}"`,
+      `"${m.telp}"`,
       `"${m.alamat.replace(/"/g, '""')}"`,
-      `"${m.status}"`,
-      `"${m.memberSejak}"`,
+      `"${formatTanggal(m.created_at)}"`,
     ]);
 
     const csvContent = [
@@ -564,8 +326,8 @@ export default function AdminMembersDirectoryPage() {
               <CalendarCheck className="w-4 h-4 text-gray-400" />
               <span>Operasional Reservasi</span>
             </div>
-            <span className="bg-[#FFD500] text-[#111827] font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0">
-              3
+            <span className="bg-[#FFD500] text-[#111827] font-bold text-[10px] min-w-5 h-5 px-1 rounded-full flex items-center justify-center shrink-0">
+              {pendingCountQuery.data ?? 0}
             </span>
           </Link>
 
@@ -688,7 +450,7 @@ export default function AdminMembersDirectoryPage() {
 
       {/* ─── 3. SISI KANAN: WORKSPACE KONTEN UTAMA ─────────────────────────────── */}
       <main className="flex-1 min-w-0 p-6 sm:p-8 xl:p-10 space-y-7 overflow-y-auto mt-14 lg:mt-0">
-        <AdminPageTransition pageKey={`${selectedTab}-${currentPage}-${searchQuery}`}>
+        <AdminPageTransition pageKey={`${currentPage}-${searchQuery}`}>
         {/* A. HEADER HALAMAN & GLOBAL ACTIONS */}
         <header className="admin-header-animate flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -726,7 +488,7 @@ export default function AdminMembersDirectoryPage() {
               </span>
             </div>
             <span className="text-xs text-gray-400 font-medium mt-2">
-              18 akun aktif berkunjung bulan ini
+              Sinkron langsung dengan database member
             </span>
           </div>
 
@@ -748,44 +510,41 @@ export default function AdminMembersDirectoryPage() {
             </span>
           </div>
 
-          {/* Kartu 3: Member Aktif di Lokasi (Canary Yellow Signature Card) */}
+          {/* Kartu 3: Member Baru Bulan Ini (Canary Yellow Signature Card) */}
           <div className="admin-kpi-card bg-[#FFD500] rounded-3xl p-6 shadow-xs flex flex-col justify-between transition-transform hover:-translate-y-0.5 duration-200">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black uppercase tracking-wider text-[#111827]/80">
-                MEMBER AKTIF DI LOKASI
+                MEMBER BARU BULAN INI
               </span>
               <Zap className="w-4 h-4 text-[#111827]/70 fill-current" />
             </div>
             <div className="my-3">
               <span className="text-3xl sm:text-4xl font-black text-[#111827] tracking-tight">
-                <CountUp target={activeInRoomCount} suffix=" Orang Saat Ini" />
+                <CountUp target={newMembersThisMonthCount} suffix=" Orang" />
               </span>
             </div>
             <span className="text-xs font-semibold text-[#111827]/90 mt-2">
-              Tersebar di personal desk dan meeting room
+              Terhitung dari tanggal registrasi akun member
             </span>
           </div>
         </section>
 
-        {/* C. TOOLBAR PENCARIAN, FILTER & EKSPOR */}
+        {/* C. TOOLBAR PENCARIAN & EKSPOR */}
         <section className="admin-toolbar-animate flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 pt-2">
-          {/* Field Pencarian Multivariat (Sisi Kiri) */}
+          {/* Field Pencarian Server-Side: nama_member / instansi / telp (Sisi Kiri) */}
           <div className="relative w-full lg:w-96 flex items-center bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-xs focus-within:border-[#5E43F3] focus-within:ring-2 focus-within:ring-[#5E43F3]/20 transition-all">
             <Search className="w-4 h-4 text-gray-400 mr-2.5 shrink-0" />
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Cari nama, instansi, atau nomor telepon..."
               className="w-full text-xs font-medium text-[#111827] placeholder:text-gray-400 bg-transparent focus:outline-none"
             />
-            {searchQuery && (
+            {searchInput && (
               <button
                 type="button"
-                onClick={() => setSearchQuery("")}
+                onClick={() => setSearchInput("")}
                 className="text-gray-400 hover:text-gray-600 ml-1"
               >
                 <X className="w-3.5 h-3.5" />
@@ -793,59 +552,8 @@ export default function AdminMembersDirectoryPage() {
             )}
           </div>
 
-          {/* Filter Segmented Pills & Ekspor (Sisi Kanan) */}
+          {/* Tombol Ekspor CSV (Sisi Kanan) */}
           <div className="flex flex-wrap items-center gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              {/* Pill 1: Semua */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTab("Semua");
-                  setCurrentPage(1);
-                }}
-                className={`px-4 py-2 rounded-full font-bold transition-colors cursor-pointer ${
-                  selectedTab === "Semua"
-                    ? "bg-[#111827] text-white shadow-xs"
-                    : "bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 font-medium"
-                }`}
-              >
-                Semua ({totalMembersCount})
-              </button>
-
-              {/* Pill 2: Aktif di Ruangan */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTab("Aktif di Ruangan");
-                  setCurrentPage(1);
-                }}
-                className={`px-4 py-2 rounded-full font-bold transition-colors cursor-pointer ${
-                  selectedTab === "Aktif di Ruangan"
-                    ? "bg-[#111827] text-white shadow-xs"
-                    : "bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 font-medium"
-                }`}
-              >
-                Aktif di Ruangan ({activeInRoomCount})
-              </button>
-
-              {/* Pill 3: Reservasi Hari Ini */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTab("Reservasi Hari Ini");
-                  setCurrentPage(1);
-                }}
-                className={`px-4 py-2 rounded-full font-bold transition-colors cursor-pointer ${
-                  selectedTab === "Reservasi Hari Ini"
-                    ? "bg-[#111827] text-white shadow-xs"
-                    : "bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 font-medium"
-                }`}
-              >
-                Reservasi Hari Ini ({reservedTodayCount})
-              </button>
-            </div>
-
-            {/* Tombol Ekspor CSV */}
             <button
               type="button"
               onClick={handleExportCSV}
@@ -876,10 +584,7 @@ export default function AdminMembersDirectoryPage() {
                     NO. TELEPON / WHATSAPP
                   </th>
                   <th className="py-4 px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    ALAMAT DOMISILI
-                  </th>
-                  <th className="py-4 px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    STATUS
+                    MEMBER SEJAK
                   </th>
                   <th className="py-4 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">
                     AKSI
@@ -887,107 +592,108 @@ export default function AdminMembersDirectoryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
-                {paginatedMembers.length === 0 ? (
+                {membersQuery.isLoading ? (
+                  Array.from({ length: 5 }, (_, i) => (
+                    <tr key={`skeleton-${i}`} className="admin-table-row">
+                      <td colSpan={6} className="py-3 px-6">
+                        <div className="h-8 w-full rounded-xl bg-gray-100 animate-pulse" />
+                      </td>
+                    </tr>
+                  ))
+                ) : membersQuery.isError ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-400">
-                      Tidak ada member yang cocok dengan kriteria pencarian.
+                    <td colSpan={6} className="py-12 text-center">
+                      <p className="text-xs font-semibold text-rose-600">
+                        Gagal memuat data member.
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        {getErrorMessage(membersQuery.error)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => membersQuery.refetch()}
+                        className="mt-4 bg-[#5E43F3] hover:bg-[#4A32D6] text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                      >
+                        Coba Lagi
+                      </button>
+                    </td>
+                  </tr>
+                ) : paginatedMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-gray-400">
+                      {searchQuery
+                        ? `Tidak ada member yang cocok dengan pencarian "${searchQuery}".`
+                        : "Belum ada member terdaftar."}
                     </td>
                   </tr>
                 ) : (
-                  paginatedMembers.map((member) => {
-                    const isAktif = member.status === "Aktif di Ruangan";
-                    const isReserved = member.status === "Reservasi Hari Ini";
-                    const isInactive = member.status === "Tidak Aktif";
-
-                    return (
-                      <tr
-                        key={member.id}
-                        className="admin-table-row hover:bg-gray-50/70 transition-colors"
-                      >
-                        {/* Kolom 1: MEMBER / NAMA LENGKAP */}
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-3.5">
-                            <div className="w-9 h-9 rounded-full bg-gray-100 border border-gray-200 text-gray-600 font-bold text-xs flex items-center justify-center shrink-0">
-                              {member.avatarText || "MB"}
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold text-[#111827] block leading-tight">
-                                {member.nama}
-                              </span>
-                              <span className="text-[10px] text-gray-400 block mt-0.5">
-                                Member sejak {member.memberSejak}
-                              </span>
-                            </div>
+                  paginatedMembers.map((member) => (
+                    <tr
+                      key={member.id}
+                      className="admin-table-row hover:bg-gray-50/70 transition-colors"
+                    >
+                      {/* Kolom 1: MEMBER / NAMA LENGKAP */}
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-9 h-9 rounded-full bg-gray-100 border border-gray-200 text-gray-600 font-bold text-xs flex items-center justify-center shrink-0">
+                            {initialsOf(member.nama_member)}
                           </div>
-                        </td>
-
-                        {/* Kolom 2: USERNAME */}
-                        <td className="py-4 px-4">
-                          <span className="font-mono text-xs text-gray-600">
-                            {member.username}
+                          <span className="text-xs font-bold text-[#111827] block leading-tight">
+                            {member.nama_member}
                           </span>
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* Kolom 3: INSTANSI / ASAL */}
-                        <td className="py-4 px-4">
-                          <span className="text-xs text-gray-800 font-medium">
-                            {member.instansi}
-                          </span>
-                        </td>
+                      {/* Kolom 2: USERNAME (resource backend belum mengekspos) */}
+                      <td className="py-4 px-4">
+                        <span className="font-mono text-xs text-gray-600">
+                          {member.username ?? "—"}
+                        </span>
+                      </td>
 
-                        {/* Kolom 4: NO. TELEPON / WHATSAPP */}
-                        <td className="py-4 px-4">
-                          <span className="font-mono text-xs text-gray-700 whitespace-nowrap">
-                            {member.telepon}
-                          </span>
-                        </td>
+                      {/* Kolom 3: INSTANSI / ASAL */}
+                      <td className="py-4 px-4">
+                        <span className="text-xs text-gray-800 font-medium">
+                          {member.instansi}
+                        </span>
+                      </td>
 
-                        {/* Kolom 5: ALAMAT DOMISILI */}
-                        <td className="py-4 px-4 max-w-[220px]">
-                          <span className="text-xs text-gray-600 line-clamp-1">
-                            {member.alamat}
-                          </span>
-                        </td>
+                      {/* Kolom 4: NO. TELEPON / WHATSAPP */}
+                      <td className="py-4 px-4">
+                        <span className="font-mono text-xs text-gray-700 whitespace-nowrap">
+                          {member.telp}
+                        </span>
+                      </td>
 
-                        {/* Kolom 6: STATUS */}
-                        <td className="py-4 px-4 whitespace-nowrap">
-                          {isAktif && (
-                            <span className="text-xs font-semibold text-emerald-600">
-                              Aktif di Ruangan
-                            </span>
-                          )}
-                          {isReserved && (
-                            <span className="text-xs font-semibold text-blue-600">
-                              Reservasi Hari Ini
-                            </span>
-                          )}
-                          {isInactive && (
-                            <span className="text-xs font-medium text-gray-400">
-                              Tidak Aktif
-                            </span>
-                          )}
-                        </td>
+                      {/* Kolom 5: MEMBER SEJAK (tanggal registrasi) */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <span className="text-xs text-gray-600">
+                          {formatTanggal(member.created_at)}
+                        </span>
+                      </td>
 
-                        {/* Kolom 7: AKSI */}
-                        <td className="py-4 px-6 text-right space-y-0.5 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setEditingMember(member)}
-                            className="text-xs font-medium text-[#5E43F3] hover:text-[#4A32D6] active:scale-95 transition-transform duration-100 block ml-auto cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeletingMember(member)}
-                            className="text-[11px] font-medium text-gray-400 hover:text-rose-600 active:scale-95 transition-transform duration-100 block ml-auto cursor-pointer"
-                          >
-                            Hapus
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                      {/* Kolom 6: AKSI */}
+                      <td className="py-4 px-6 text-right space-y-0.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditPassword("");
+                            setEditingMember(member);
+                          }}
+                          className="text-xs font-medium text-[#5E43F3] hover:text-[#4A32D6] active:scale-95 transition-transform duration-100 block ml-auto cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingMember(member)}
+                          className="text-[11px] font-medium text-gray-400 hover:text-rose-600 active:scale-95 transition-transform duration-100 block ml-auto cursor-pointer"
+                        >
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -997,7 +703,7 @@ export default function AdminMembersDirectoryPage() {
           <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 border-t border-gray-100 text-xs text-gray-500 gap-3">
             <span>
               Menampilkan <strong className="text-gray-900">{startIndexDisplay}–{endIndexDisplay}</strong> dari{" "}
-              <strong className="text-gray-900">{filteredMembers.length}</strong> member terdaftar
+              <strong className="text-gray-900">{members.length}</strong> member terdaftar
             </span>
 
             <div className="flex items-center gap-2">
@@ -1139,10 +845,26 @@ export default function AdminMembersDirectoryPage() {
                     required
                     value={newTelepon}
                     onChange={(e) => setNewTelepon(e.target.value)}
-                    placeholder="0857-1234-5678"
+                    placeholder="085712345678"
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Password Akun Member */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  Password Akun
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Minimal 6 karakter"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
+                />
               </div>
 
               {/* Alamat Domisili */}
@@ -1160,22 +882,6 @@ export default function AdminMembersDirectoryPage() {
                 />
               </div>
 
-              {/* Status Member */}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  Status Keberadaan Member
-                </label>
-                <select
-                  value={newStatus}
-                  onChange={(e) => setNewStatus(e.target.value as MemberStatus)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
-                >
-                  <option value="Aktif di Ruangan">Aktif di Ruangan</option>
-                  <option value="Reservasi Hari Ini">Reservasi Hari Ini</option>
-                  <option value="Tidak Aktif">Tidak Aktif</option>
-                </select>
-              </div>
-
               {/* Tombol Simpan & Batal */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
                 <button
@@ -1187,9 +893,10 @@ export default function AdminMembersDirectoryPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#5E43F3] hover:bg-[#4A32D6] text-white font-bold shadow-md cursor-pointer transition-transform active:scale-98"
+                  disabled={createMember.isPending}
+                  className="px-6 py-2.5 rounded-xl bg-[#5E43F3] hover:bg-[#4A32D6] text-white font-bold shadow-md cursor-pointer transition-transform active:scale-98 disabled:opacity-60 disabled:cursor-wait"
                 >
-                  Simpan Member Baru
+                  {createMember.isPending ? "Menyimpan..." : "Simpan Member Baru"}
                 </button>
               </div>
             </form>
@@ -1211,7 +918,7 @@ export default function AdminMembersDirectoryPage() {
                   Edit Data Member
                 </h3>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Perbarui profil dan status reservasi member {editingMember.nama}
+                  Perbarui profil member {editingMember.nama_member}
                 </p>
               </div>
               <button
@@ -1232,9 +939,9 @@ export default function AdminMembersDirectoryPage() {
                   <input
                     type="text"
                     required
-                    value={editingMember.nama}
+                    value={editingMember.nama_member}
                     onChange={(e) =>
-                      setEditingMember({ ...editingMember, nama: e.target.value })
+                      setEditingMember({ ...editingMember, nama_member: e.target.value })
                     }
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                   />
@@ -1246,14 +953,14 @@ export default function AdminMembersDirectoryPage() {
                   </label>
                   <input
                     type="text"
-                    required
-                    value={editingMember.username}
+                    value={editingMember.username ?? ""}
                     onChange={(e) =>
                       setEditingMember({
                         ...editingMember,
                         username: e.target.value,
                       })
                     }
+                    placeholder="budi.member"
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                   />
                 </div>
@@ -1269,10 +976,7 @@ export default function AdminMembersDirectoryPage() {
                     required
                     value={editingMember.instansi}
                     onChange={(e) =>
-                      setEditingMember({
-                        ...editingMember,
-                        instansi: e.target.value,
-                      })
+                      setEditingMember({ ...editingMember, instansi: e.target.value })
                     }
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                   />
@@ -1285,16 +989,28 @@ export default function AdminMembersDirectoryPage() {
                   <input
                     type="text"
                     required
-                    value={editingMember.telepon}
+                    value={editingMember.telp}
                     onChange={(e) =>
-                      setEditingMember({
-                        ...editingMember,
-                        telepon: e.target.value,
-                      })
+                      setEditingMember({ ...editingMember, telp: e.target.value })
                     }
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Password Baru (opsional) */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  Password Baru (Opsional)
+                </label>
+                <input
+                  type="password"
+                  minLength={6}
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Kosongkan bila tidak diubah"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
+                />
               </div>
 
               <div>
@@ -1306,33 +1022,10 @@ export default function AdminMembersDirectoryPage() {
                   required
                   value={editingMember.alamat}
                   onChange={(e) =>
-                    setEditingMember({
-                      ...editingMember,
-                      alamat: e.target.value,
-                    })
+                    setEditingMember({ ...editingMember, alamat: e.target.value })
                   }
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                 />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  Status Member
-                </label>
-                <select
-                  value={editingMember.status}
-                  onChange={(e) =>
-                    setEditingMember({
-                      ...editingMember,
-                      status: e.target.value as MemberStatus,
-                    })
-                  }
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
-                >
-                  <option value="Aktif di Ruangan">Aktif di Ruangan</option>
-                  <option value="Reservasi Hari Ini">Reservasi Hari Ini</option>
-                  <option value="Tidak Aktif">Tidak Aktif</option>
-                </select>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
@@ -1345,9 +1038,10 @@ export default function AdminMembersDirectoryPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#111827] hover:bg-black text-white font-bold shadow-md cursor-pointer transition-transform active:scale-98"
+                  disabled={updateMember.isPending}
+                  className="px-6 py-2.5 rounded-xl bg-[#111827] hover:bg-black text-white font-bold shadow-md cursor-pointer transition-transform active:scale-98 disabled:opacity-60 disabled:cursor-wait"
                 >
-                  Simpan Perubahan
+                  {updateMember.isPending ? "Menyimpan..." : "Simpan Perubahan"}
                 </button>
               </div>
             </form>
@@ -1373,9 +1067,9 @@ export default function AdminMembersDirectoryPage() {
             <p className="text-xs text-gray-500 mt-1 mb-6">
               Apakah Anda yakin ingin menghapus data member{" "}
               <strong className="text-black font-bold">
-                {deletingMember.nama}
+                {deletingMember.nama_member}
               </strong>{" "}
-              ({deletingMember.username}) dari direktori? Riwayat transaksi dan reservasi terkait akan diarsipkan.
+              ({deletingMember.username ?? "—"}) dari direktori? Akun dan data member terkait akan dihapus.
             </p>
 
             <div className="flex items-center justify-center gap-3">
@@ -1389,9 +1083,10 @@ export default function AdminMembersDirectoryPage() {
               <button
                 type="button"
                 onClick={handleDeleteMember}
-                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md cursor-pointer text-xs"
+                disabled={deleteMember.isPending}
+                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md cursor-pointer text-xs disabled:opacity-60 disabled:cursor-wait"
               >
-                Ya, Hapus Member
+                {deleteMember.isPending ? "Menghapus..." : "Ya, Hapus Member"}
               </button>
             </div>
           </div>
