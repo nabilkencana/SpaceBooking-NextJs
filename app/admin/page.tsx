@@ -3,23 +3,16 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  Armchair,
-  ArrowDown,
-  ArrowRight,
   BarChart3,
   CalendarCheck,
-  Check,
-  ChevronDown,
   Clock,
-  Download,
   Info,
   Layers,
-  LayoutDashboard,
   LayoutGrid,
-  LogOut,
+  Loader2,
   Menu,
-  Percent,
   Settings,
   Tag,
   Users,
@@ -29,84 +22,85 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import AdminPageTransition from "@/components/admin/AdminPageTransition";
 import { CountUp } from "@/hooks/useCountUp";
+import {
+  adminKeys,
+  useAdminReservations,
+  useReports,
+  useReservationAction,
+} from "@/hooks/useAdmin";
+import type { Reservasi } from "@/types";
+import {
+  PAYMENT_STATUS_LABELS,
+  STATUS_ACTION_LABELS,
+} from "./status-labels";
 
-// ─── TYPES & INTERFACES ──────────────────────────────────────────────────────────
-export type AdminReservationStatus =
-  | "menunggu_konfirmasi"
-  | "disetujui"
-  | "sedang_digunakan"
-  | "selesai"
-  | "dibatalkan";
-
-export interface AdminReservationItem {
-  id: string;
-  kodeBooking: string;
-  namaTamu: string;
-  instansi: string;
-  namaRuang: string;
-  jadwal: string;
-  durasiJam: number;
-  status: AdminReservationStatus;
-  nominal: number;
-}
-
-// ─── INITIAL OPERATIONAL QUEUE DATA (PERSIS GAMBAR REFERENSI) ────────────────────
-const INITIAL_RESERVATIONS: AdminReservationItem[] = [
-  {
-    id: "1",
-    kodeBooking: "BOOK-20260830-0012",
-    namaTamu: "John Doe",
-    instansi: "PT Inovasi Digital",
-    namaRuang: "Personal Desk – Flexi 01",
-    jadwal: "09:00 – 12:00 WIB",
-    durasiJam: 3,
-    status: "menunggu_konfirmasi",
-    nominal: 75000,
-  },
-  {
-    id: "2",
-    kodeBooking: "BOOK-20260830-0015",
-    namaTamu: "Siti Nurhaliza",
-    instansi: "Universitas Brawijaya",
-    namaRuang: "Meeting Room Alpha",
-    jadwal: "13:00 – 15:00 WIB",
-    durasiJam: 2,
-    status: "disetujui",
-    nominal: 200000,
-  },
-  {
-    id: "3",
-    kodeBooking: "BOOK-20260830-0018",
-    namaTamu: "Rian Ardiansyah",
-    instansi: "Nomad Remote",
-    namaRuang: "Private Glass Suite",
-    jadwal: "08:00 – 14:00 WIB",
-    durasiJam: 6,
-    status: "sedang_digunakan",
-    nominal: 250000,
-  },
+// ─── PAGE-LOCAL HELPERS ──────────────────────────────────────────────────────────
+const MONTH_NAMES_ID = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
 ];
+
+const formatRupiah = (value: number) => `Rp ${value.toLocaleString("id-ID")}`;
+
+const formatTimestamp = (iso: string) =>
+  new Date(iso).toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const queryClient = useQueryClient();
 
-  // State operasional
-  const [activeTab, setActiveTab] = useState<string>("ringkasan");
-  const [reservations, setReservations] =
-    useState<AdminReservationItem[]>(INITIAL_RESERVATIONS);
-  const [selectedMonth, setSelectedMonth] = useState("Agustus 2026");
-  const [selectedYear, setSelectedYear] = useState("2026");
+  const today = new Date();
+  const [reportMonth, setReportMonth] = useState(today.getMonth() + 1);
+  const [reportYear, setReportYear] = useState(today.getFullYear());
   const [isMonthOpen, setIsMonthOpen] = useState(false);
-  const [isYearOpen, setIsYearOpen] = useState(false);
+  const [actingId, setActingId] = useState<number | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // ─── LIVE DATA ───────────────────────────────────────────────────────────────
+  const { monthly, income } = useReports(reportMonth, reportYear);
+  const pendingReservations = useAdminReservations({
+    status: "belum_dikonfirm",
+  });
+  const reservationAction = useReservationAction();
+
+  const monthlyData = monthly.data ?? null;
+  const incomeData = income.data ?? null;
+  const pendingItems = pendingReservations.data ?? [];
+
+  const monthLabel = `${MONTH_NAMES_ID[reportMonth - 1]} ${reportYear}`;
+  // 6 opsi dropdown: bulan berjalan + 5 bulan sebelumnya.
+  const monthOptions = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    return {
+      month: d.getMonth() + 1,
+      year: d.getFullYear(),
+      label: `${MONTH_NAMES_ID[d.getMonth()]} ${d.getFullYear()}`,
+    };
+  });
 
   // Identitas admin
   const adminName =
     user?.space_owner?.nama_pemilik ??
     user?.member?.nama_member ??
     user?.username ??
-    "Ahmad Bidin";
+    "Admin";
   const adminRole = "Admin Pengelola";
   const initials = adminName
     .split(" ")
@@ -115,33 +109,60 @@ export default function AdminDashboardPage() {
     .substring(0, 2)
     .toUpperCase();
 
-  // ─── ACTION HANDLERS ─────────────────────────────────────────────────────────
-  const handleApprove = (id: string, kode: string) => {
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: "disetujui" } : r))
-    );
-    toast.success(`Reservasi ${kode} berhasil disetujui.`);
-  };
+  // ─── ACTION HANDLERS (OPTIMISTIC) ────────────────────────────────────────────
+  // TanStack 5.102 hanya menerima onMutate di level useMutation (tidak per-call),
+  // sedangkan useReservationAction (hooks/, milik T13-17) tidak menyediakannya.
+  // Pola onMutate direplikasi: cancel → snapshot → setQueryData → mutate → rollback onError.
+  const handleDecision = async (
+    item: Reservasi,
+    status: "disetujui" | "dibatalkan"
+  ) => {
+    const pendingKey = adminKeys.reservations({
+      status: "belum_dikonfirm",
+    });
+    setActingId(item.id);
 
-  const handleReject = (id: string, kode: string) => {
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: "dibatalkan" } : r))
+    await queryClient.cancelQueries({ queryKey: pendingKey });
+    const previous =
+      queryClient.getQueryData<Reservasi[]>(pendingKey);
+    // Optimistik: baris langsung keluar dari antrean pending.
+    queryClient.setQueryData<Reservasi[]>(
+      pendingKey,
+      (old) => (old ?? []).filter((r) => r.id !== item.id)
     );
-    toast.error(`Reservasi ${kode} ditolak.`);
-  };
 
-  const handleCheckIn = (id: string, tamu: string, ruang: string) => {
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: "sedang_digunakan" } : r))
+    reservationAction.mutate(
+      { id: item.id, status },
+      {
+        onSuccess: () => {
+          if (status === "disetujui") {
+            toast.success(
+              `Reservasi ${item.kode_booking} berhasil disetujui.`
+            );
+          } else {
+            toast.error(`Reservasi ${item.kode_booking} ditolak.`);
+          }
+        },
+        onError: (error) => {
+          // Rollback: pulihkan snapshot antrean sebelum mutasi.
+          if (previous) {
+            queryClient.setQueryData(pendingKey, previous);
+          } else {
+            void queryClient.invalidateQueries({ queryKey: pendingKey });
+          }
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Terjadi kesalahan tak terduga";
+          toast.error(
+            `Gagal memproses reservasi ${item.kode_booking}: ${message}`
+          );
+        },
+        onSettled: () => {
+          setActingId(null);
+        },
+      }
     );
-    toast.success(`Tamu ${tamu} berhasil check-in ke ${ruang}.`);
-  };
-
-  const handleCheckOut = (id: string, tamu: string) => {
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: "selesai" } : r))
-    );
-    toast.success(`Sesi kerja ${tamu} telah selesai (check-out).`);
   };
 
   const handleLogout = async () => {
@@ -154,23 +175,27 @@ export default function AdminDashboardPage() {
     const headers = [
       "KODE BOOKING",
       "NAMA TAMU",
-      "INSTANSI",
+      "TELEPON",
       "RUANG KERJA",
-      "JADWAL SEWA",
+      "TANGGAL RESERVASI",
+      "JAM SEWA",
       "DURASI (JAM)",
       "STATUS",
+      "PEMBAYARAN",
       "NOMINAL (IDR)",
     ];
 
-    const rows = reservations.map((r) => [
-      `"${r.kodeBooking}"`,
-      `"${r.namaTamu}"`,
-      `"${r.instansi}"`,
-      `"${r.namaRuang}"`,
-      `"${r.jadwal}"`,
-      r.durasiJam,
-      `"${r.status}"`,
-      r.nominal,
+    const rows = pendingItems.map((r) => [
+      `"${r.kode_booking}"`,
+      `"${r.member?.nama_member ?? "-"}"`,
+      `"${r.member?.telp ?? "-"}"`,
+      `"${r.space?.nama_space ?? "-"}"`,
+      `"${r.tanggal_reservasi}"`,
+      `"${r.jam_mulai} - ${r.jam_selesai}"`,
+      r.durasi_jam,
+      `"${STATUS_ACTION_LABELS[r.status].label}"`,
+      `"${PAYMENT_STATUS_LABELS[r.payment_status]}"`,
+      r.total_bayar,
     ]);
 
     const csvContent =
@@ -182,7 +207,7 @@ export default function AdminDashboardPage() {
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `rekapitulasi_omzet_${selectedMonth.toLowerCase().replace(/\s+/g, "_")}.csv`
+      `rekapitulasi_omzet_${monthLabel.toLowerCase().replace(/\s+/g, "_")}.csv`
     );
     document.body.appendChild(link);
     link.click();
@@ -216,20 +241,11 @@ export default function AdminDashboardPage() {
           <button
             type="button"
             onClick={() => {
-              setActiveTab("ringkasan");
               setMobileSidebarOpen(false);
             }}
-            className={`w-full text-left font-semibold text-xs rounded-xl px-4 py-3 flex items-center gap-3 transition-all cursor-pointer ${
-              activeTab === "ringkasan"
-                ? "bg-[#111827] text-white shadow-sm"
-                : "text-gray-600 hover:text-black hover:bg-gray-50 font-medium"
-            }`}
+            className={`w-full text-left font-semibold text-xs rounded-xl px-4 py-3 flex items-center gap-3 transition-all cursor-pointer bg-[#111827] text-white shadow-sm`}
           >
-            <BarChart3
-              className={`w-4 h-4 ${
-                activeTab === "ringkasan" ? "text-white" : "text-gray-400"
-              }`}
-            />
+            <BarChart3 className="w-4 h-4 text-white" />
             <span>Ringkasan & Laporan</span>
           </button>
 
@@ -243,7 +259,7 @@ export default function AdminDashboardPage() {
               <span>Operasional Reservasi</span>
             </div>
             <span className="bg-[#FFD500] text-[#111827] font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0">
-              5
+              {pendingItems.length}
             </span>
           </Link>
 
@@ -289,7 +305,7 @@ export default function AdminDashboardPage() {
       <div className="p-4 m-4 rounded-2xl bg-gray-50/80 border border-gray-100 flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-[#111827] text-white font-bold text-xs flex items-center justify-center shrink-0">
-            {initials || "AB"}
+            {initials || "AD"}
           </div>
           <div className="min-w-0 flex-1">
             <span className="text-xs font-bold text-[#111827] block leading-tight truncate">
@@ -347,7 +363,7 @@ export default function AdminDashboardPage() {
 
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-[#111827] text-white font-bold text-[10px] flex items-center justify-center">
-            {initials || "AB"}
+            {initials || "AD"}
           </div>
         </div>
       </div>
@@ -367,7 +383,7 @@ export default function AdminDashboardPage() {
 
       {/* ─── 3. SISI KANAN: WORKSPACE KONTEN UTAMA ────────────────────────────── */}
       <main className="flex-1 min-w-0 p-6 sm:p-8 xl:p-10 space-y-8 overflow-y-auto mt-14 lg:mt-0">
-        <AdminPageTransition pageKey={`${selectedMonth}-${selectedYear}`}>
+        <AdminPageTransition pageKey={monthLabel}>
           {/* HEADER HALAMAN & TOOLBAR FILTER */}
           <div className="admin-header-animate flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
@@ -381,78 +397,41 @@ export default function AdminDashboardPage() {
 
             {/* Sisi Kanan Toolbar Filter & Ekspor */}
             <div className="admin-toolbar-animate flex flex-wrap items-center gap-3">
-              {/* Dropdown Bulan */}
+              {/* Dropdown Periode (Bulan + Tahun) */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsMonthOpen((prev) => !prev);
-                    setIsYearOpen(false);
-                  }}
+                  onClick={() => setIsMonthOpen((prev) => !prev)}
                   className="border border-[#E5E7EB] bg-white rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-700 hover:border-gray-300 transition-colors flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
                 >
-                  <span>{selectedMonth}</span>
+                  <span>{monthLabel}</span>
                   <span className="text-[10px] text-gray-400">▾</span>
                 </button>
 
                 {isMonthOpen && (
                   <div className="absolute right-0 mt-1.5 w-40 bg-white rounded-xl border border-[#E5E7EB] shadow-lg py-1 z-30 animate-in fade-in zoom-in-95 duration-100">
-                    {["Agustus 2026", "Juli 2026", "Juni 2026", "Mei 2026"].map(
-                      (m) => (
+                    {monthOptions.map((m) => {
+                      const isActive =
+                        reportMonth === m.month && reportYear === m.year;
+                      return (
                         <button
-                          key={m}
+                          key={m.label}
                           type="button"
                           onClick={() => {
-                            setSelectedMonth(m);
+                            setReportMonth(m.month);
+                            setReportYear(m.year);
                             setIsMonthOpen(false);
                           }}
                           className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${
-                            selectedMonth === m
+                            isActive
                               ? "bg-gray-100 text-black font-bold"
                               : "text-gray-600 hover:bg-gray-50"
                           }`}
                         >
-                          {m}
+                          {m.label}
                         </button>
-                      )
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Dropdown Tahun */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsYearOpen((prev) => !prev);
-                    setIsMonthOpen(false);
-                  }}
-                  className="border border-[#E5E7EB] bg-white rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-700 hover:border-gray-300 transition-colors flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
-                >
-                  <span>{selectedYear}</span>
-                  <span className="text-[10px] text-gray-400">▾</span>
-                </button>
-
-                {isYearOpen && (
-                  <div className="absolute right-0 mt-1.5 w-32 bg-white rounded-xl border border-[#E5E7EB] shadow-lg py-1 z-30 animate-in fade-in zoom-in-95 duration-100">
-                    {["2026", "2025"].map((y) => (
-                      <button
-                        key={y}
-                        type="button"
-                        onClick={() => {
-                          setSelectedYear(y);
-                          setIsYearOpen(false);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${
-                          selectedYear === y
-                            ? "bg-gray-100 text-black font-bold"
-                            : "text-gray-600 hover:bg-gray-50"
-                        }`}
-                      >
-                        {y}
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -478,11 +457,17 @@ export default function AdminDashboardPage() {
                   REALISASI PENDAPATAN BERSIH
                 </span>
                 <h2 className="text-3xl sm:text-4xl font-black font-mono text-[#111827] tracking-tight my-4">
-                  <CountUp target={1600000} prefix="Rp " duration={0.85} />
+                  <CountUp
+                    target={incomeData?.realisasi_pendapatan_bersih ?? 0}
+                    prefix="Rp "
+                    duration={0.85}
+                  />
                 </h2>
               </div>
               <p className="text-xs font-semibold text-[#111827]/90 pt-1">
-                15 transaksi selesai & aktif pada periode ini
+                {monthly.isLoading
+                  ? "Memuat laporan periode ini..."
+                  : `${monthlyData?.total_transaksi ?? 0} transaksi tercatat pada periode ini`}
               </p>
             </div>
 
@@ -496,11 +481,15 @@ export default function AdminDashboardPage() {
                   <Info className="w-3.5 h-3.5" />
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-extrabold font-mono text-[#111827] tracking-tight my-4">
-                  <CountUp target={1850000} prefix="Rp " duration={0.85} />
+                  <CountUp
+                    target={monthlyData?.estimasi_pendapatan_kotor ?? 0}
+                    prefix="Rp "
+                    duration={0.85}
+                  />
                 </h2>
               </div>
               <p className="text-xs font-medium text-rose-600 pt-1">
-                Potongan Kupon Promo: -Rp 250.000
+                Potongan Kupon Promo: -{formatRupiah(monthlyData?.total_potongan_diskon ?? 0)}
               </p>
             </div>
 
@@ -514,11 +503,17 @@ export default function AdminDashboardPage() {
                   <Clock className="w-3.5 h-3.5" />
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight my-4">
-                  <CountUp target={48} suffix=" Jam Sewa" duration={0.65} />
+                  <CountUp
+                    target={monthlyData?.total_jam_terpakai ?? 0}
+                    suffix=" Jam Sewa"
+                    duration={0.65}
+                  />
                 </h2>
               </div>
               <p className="text-xs text-gray-400 pt-1 font-medium">
-                Total 15 sesi reservasi terdaftar
+                {monthly.isLoading
+                  ? "Memuat laporan periode ini..."
+                  : `Total ${monthlyData?.total_transaksi ?? 0} sesi reservasi terdaftar`}
               </p>
             </div>
           </div>
@@ -538,109 +533,67 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Card 1: Personal Desk */}
-            <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] space-y-3.5 shadow-xs">
-              <h3 className="text-sm font-bold text-[#111827]">
-                Personal Desk
-              </h3>
-              <div className="space-y-1.5">
-                <div className="text-xs text-gray-500 font-medium flex justify-between">
-                  <span>Total Sesi:</span>
-                  <span className="font-mono text-gray-900 font-semibold">
-                    10 Reservasi
-                  </span>
-                </div>
-                <div className="text-xs text-gray-500 font-medium flex justify-between">
-                  <span>Durasi:</span>
-                  <span className="font-mono text-gray-900 font-semibold">
-                    30 Jam Total
-                  </span>
-                </div>
+            {monthly.isLoading ? (
+              <div className="md:col-span-3 bg-white rounded-2xl p-5 border border-[#E5E7EB] text-xs text-gray-400 font-medium shadow-xs">
+                Memuat distribusi utilisasi...
               </div>
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                  SUBTOTAL PENDAPATAN
-                </span>
-                <span className="text-base font-extrabold font-mono text-[#111827]">
-                  Rp 600.000
-                </span>
+            ) : !monthlyData || monthlyData.rincian_per_tipe_space.length === 0 ? (
+              <div className="md:col-span-3 bg-white rounded-2xl p-5 border border-[#E5E7EB] text-xs text-gray-400 font-medium shadow-xs">
+                Belum ada data utilisasi untuk periode ini.
               </div>
-            </div>
-
-            {/* Card 2: Meeting Room */}
-            <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] space-y-3.5 shadow-xs">
-              <h3 className="text-sm font-bold text-[#111827]">
-                Meeting Room
-              </h3>
-              <div className="space-y-1.5">
-                <div className="text-xs text-gray-500 font-medium flex justify-between">
-                  <span>Total Sesi:</span>
-                  <span className="font-mono text-gray-900 font-semibold">
-                    3 Reservasi
-                  </span>
+            ) : (
+              monthlyData.rincian_per_tipe_space.map((rincian) => (
+                <div
+                  key={rincian.tipe}
+                  className="bg-white rounded-2xl p-5 border border-[#E5E7EB] space-y-3.5 shadow-xs"
+                >
+                  <h3 className="text-sm font-bold text-[#111827]">
+                    {rincian.label}
+                  </h3>
+                  <div className="space-y-1.5">
+                    <div className="text-xs text-gray-500 font-medium flex justify-between">
+                      <span>Total Sesi:</span>
+                      <span className="font-mono text-gray-900 font-semibold">
+                        {rincian.total_booking} Reservasi
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 font-medium flex justify-between">
+                      <span>Durasi:</span>
+                      <span className="font-mono text-gray-900 font-semibold">
+                        {rincian.total_jam} Jam Total
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                      SUBTOTAL PENDAPATAN
+                    </span>
+                    <span className="text-base font-extrabold font-mono text-[#111827]">
+                      {formatRupiah(rincian.total_pendapatan)}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-xs text-gray-500 font-medium flex justify-between">
-                  <span>Durasi:</span>
-                  <span className="font-mono text-gray-900 font-semibold">
-                    8 Jam Total
-                  </span>
-                </div>
-              </div>
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                  SUBTOTAL PENDAPATAN
-                </span>
-                <span className="text-base font-extrabold font-mono text-[#111827]">
-                  Rp 750.000
-                </span>
-              </div>
-            </div>
-
-            {/* Card 3: Private Office */}
-            <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] space-y-3.5 shadow-xs">
-              <h3 className="text-sm font-bold text-[#111827]">
-                Private Office
-              </h3>
-              <div className="space-y-1.5">
-                <div className="text-xs text-gray-500 font-medium flex justify-between">
-                  <span>Total Sesi:</span>
-                  <span className="font-mono text-gray-900 font-semibold">
-                    2 Reservasi
-                  </span>
-                </div>
-                <div className="text-xs text-gray-500 font-medium flex justify-between">
-                  <span>Durasi:</span>
-                  <span className="font-mono text-gray-900 font-semibold">
-                    10 Jam Total
-                  </span>
-                </div>
-              </div>
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                  SUBTOTAL PENDAPATAN
-                </span>
-                <span className="text-base font-extrabold font-mono text-[#111827]">
-                  Rp 250.000
-                </span>
-              </div>
-            </div>
+              ))
+            )}
           </div>
         </section>
 
-        {/* ─── 6. TABEL OPERASIONAL: ANTREAN RESERVASI HARI INI ──────────────── */}
+        {/* ─── 6. TABEL OPERASIONAL: ANTREAN RESERVASI PENDING ───────────────── */}
         <section aria-labelledby="antrean-heading" className="space-y-4">
           <div className="flex items-center justify-between">
             <h2
               id="antrean-heading"
               className="text-lg font-bold text-[#111827] tracking-tight"
             >
-              Antrean Reservasi Hari Ini
+              Antrean Reservasi Menunggu Konfirmasi
             </h2>
             <Link
               href="/admin/reservations"
               className="text-xs font-semibold text-[#5E43F3] hover:underline cursor-pointer flex items-center gap-1"
             >
-              <span>Buka Semua Reservasi (15)</span>
+              <span>
+                Buka Semua Reservasi ({monthlyData?.total_transaksi ?? 0})
+              </span>
               <span className="font-mono">→</span>
             </Link>
           </div>
@@ -663,6 +616,9 @@ export default function AdminDashboardPage() {
                       JADWAL SEWA
                     </th>
                     <th className="py-3.5 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      NOMINAL
+                    </th>
+                    <th className="py-3.5 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                       STATUS
                     </th>
                     <th className="py-3.5 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">
@@ -671,137 +627,154 @@ export default function AdminDashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {reservations.map((item) => {
-                    const isWaiting = item.status === "menunggu_konfirmasi";
-                    const isApproved = item.status === "disetujui";
-                    const isInSession = item.status === "sedang_digunakan";
-                    const isFinished = item.status === "selesai";
-                    const isCancelled = item.status === "dibatalkan";
-
-                    return (
-                      <tr
-                        key={item.id}
-                        className="admin-table-row hover:bg-gray-50/70 transition-colors"
+                  {pendingReservations.isLoading ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-8 px-6 text-center text-xs text-gray-400 font-medium"
                       >
-                        {/* 1. KODE BOOKING */}
-                        <td className="py-4 px-6 align-middle font-mono text-xs font-bold text-gray-900 whitespace-nowrap">
-                          {item.kodeBooking}
-                        </td>
+                        Memuat antrean reservasi...
+                      </td>
+                    </tr>
+                  ) : pendingReservations.isError ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 px-6 text-center space-y-2">
+                        <p className="text-xs font-semibold text-rose-600">
+                          Gagal memuat antrean reservasi.
+                          {pendingReservations.error instanceof Error
+                            ? ` ${pendingReservations.error.message}`
+                            : ""}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => pendingReservations.refetch()}
+                          className="text-xs font-semibold text-[#5E43F3] hover:underline cursor-pointer"
+                        >
+                          Coba Lagi
+                        </button>
+                      </td>
+                    </tr>
+                  ) : pendingItems.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-8 px-6 text-center text-xs text-gray-400 font-medium"
+                      >
+                        Antrean bersih — tidak ada reservasi yang menunggu
+                        konfirmasi.
+                      </td>
+                    </tr>
+                  ) : (
+                    pendingItems.map((item) => {
+                      const statusStyle = STATUS_ACTION_LABELS[item.status];
+                      const isWaiting = item.status === "belum_dikonfirm";
 
-                        {/* 2. TAMU & KONTAK */}
-                        <td className="py-4 px-6 align-middle">
-                          <span className="text-xs font-bold text-gray-900 block leading-tight">
-                            {item.namaTamu}
-                          </span>
-                          <span className="text-[10px] text-gray-400 block mt-0.5 font-medium">
-                            {item.instansi}
-                          </span>
-                        </td>
+                      return (
+                        <tr
+                          key={item.id}
+                          className="admin-table-row hover:bg-gray-50/70 transition-colors"
+                        >
+                          {/* 1. KODE BOOKING */}
+                          <td className="py-4 px-6 align-middle font-mono text-xs font-bold text-gray-900 whitespace-nowrap">
+                            {item.kode_booking}
+                          </td>
 
-                        {/* 3. RUANG KERJA */}
-                        <td className="py-4 px-6 align-middle text-xs text-gray-700 font-medium">
-                          {item.namaRuang}
-                        </td>
-
-                        {/* 4. JADWAL SEWA */}
-                        <td className="py-4 px-6 align-middle text-xs text-gray-600 font-mono">
-                          {item.jadwal}{" "}
-                          <span className="text-[11px] text-gray-400 font-sans">
-                            ({item.durasiJam} Jam)
-                          </span>
-                        </td>
-
-                        {/* 5. STATUS */}
-                        <td className="py-4 px-6 align-middle whitespace-nowrap">
-                          {isWaiting && (
-                            <span className="text-xs font-bold text-amber-700">
-                              Menunggu Konfirmasi
+                          {/* 2. TAMU & KONTAK */}
+                          <td className="py-4 px-6 align-middle">
+                            <span className="text-xs font-bold text-gray-900 block leading-tight">
+                              {item.member?.nama_member ?? "Tanpa Nama"}
                             </span>
-                          )}
-                          {isApproved && (
-                            <span className="text-xs font-bold text-emerald-700">
-                              Disetujui
+                            <span className="text-[10px] text-gray-400 block mt-0.5 font-medium font-mono">
+                              {item.member?.telp ?? "-"}
                             </span>
-                          )}
-                          {isInSession && (
-                            <span className="text-xs font-bold text-blue-700">
-                              Sedang Digunakan
-                            </span>
-                          )}
-                          {isFinished && (
-                            <span className="text-xs font-bold text-gray-500">
-                              Selesai
-                            </span>
-                          )}
-                          {isCancelled && (
-                            <span className="text-xs font-bold text-rose-600">
-                              Dibatalkan
-                            </span>
-                          )}
-                        </td>
+                          </td>
 
-                        {/* 6. TINDAKAN OPERASIONAL */}
-                        <td className="py-4 px-6 align-middle text-right whitespace-nowrap">
-                          {isWaiting && (
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleApprove(item.id, item.kodeBooking)
-                                }
-                                className="bg-[#5E43F3] hover:bg-[#4A32D6] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs active:scale-95"
-                              >
-                                Setujui
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleReject(item.id, item.kodeBooking)
-                                }
-                                className="text-xs font-semibold text-gray-500 hover:text-rose-600 px-2 py-1.5 transition-colors cursor-pointer active:scale-95"
-                              >
-                                Tolak
-                              </button>
-                            </div>
-                          )}
+                          {/* 3. RUANG KERJA */}
+                          <td className="py-4 px-6 align-middle text-xs text-gray-700 font-medium">
+                            {item.space?.nama_space ?? "-"}
+                          </td>
 
-                          {isApproved && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleCheckIn(
-                                  item.id,
-                                  item.namaTamu,
-                                  item.namaRuang
-                                )
-                              }
-                              className="bg-[#111827] hover:bg-black text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs active:scale-95"
+                          {/* 4. JADWAL SEWA */}
+                          <td className="py-4 px-6 align-middle text-xs text-gray-600 font-mono">
+                            <span className="block whitespace-nowrap">
+                              {item.tanggal_reservasi}
+                            </span>
+                            <span className="block whitespace-nowrap">
+                              {item.jam_mulai} – {item.jam_selesai}{" "}
+                              <span className="text-[11px] text-gray-400 font-sans">
+                                ({item.durasi_jam} Jam)
+                              </span>
+                            </span>
+                            {/* Timestamp operasional live dari server */}
+                            {item.check_in_at && (
+                              <span className="block text-[10px] text-gray-400 font-sans mt-0.5">
+                                Check-in: {formatTimestamp(item.check_in_at)}
+                              </span>
+                            )}
+                            {item.check_out_at && (
+                              <span className="block text-[10px] text-gray-400 font-sans mt-0.5">
+                                Check-out: {formatTimestamp(item.check_out_at)}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 5. NOMINAL */}
+                          <td className="py-4 px-6 align-middle whitespace-nowrap">
+                            <span className="text-xs font-extrabold font-mono text-gray-900 block">
+                              {formatRupiah(item.total_bayar)}
+                            </span>
+                            <span className="text-[10px] text-gray-400 block mt-0.5 font-medium">
+                              {PAYMENT_STATUS_LABELS[item.payment_status]}
+                            </span>
+                          </td>
+
+                          {/* 6. STATUS */}
+                          <td className="py-4 px-6 align-middle whitespace-nowrap">
+                            <span
+                              className={`text-xs font-bold ${statusStyle.textClass}`}
                             >
-                              Proses Check-In
-                            </button>
-                          )}
-
-                          {isInSession && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleCheckOut(item.id, item.namaTamu)
-                              }
-                              className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs active:scale-95"
-                            >
-                              Proses Check-Out
-                            </button>
-                          )}
-
-                          {(isFinished || isCancelled) && (
-                            <span className="text-xs text-gray-400 italic">
-                              Tidak ada tindakan
+                              {statusStyle.label}
                             </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+
+                          {/* 7. TINDAKAN OPERASIONAL */}
+                          <td className="py-4 px-6 align-middle text-right whitespace-nowrap">
+                            {isWaiting ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDecision(item, "disetujui")
+                                  }
+                                  disabled={reservationAction.isPending}
+                                  className="bg-[#5E43F3] hover:bg-[#4A32D6] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                                >
+                                  {actingId === item.id && (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  )}
+                                  Setujui
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDecision(item, "dibatalkan")
+                                  }
+                                  disabled={reservationAction.isPending}
+                                  className="text-xs font-semibold text-gray-500 hover:text-rose-600 px-2 py-1.5 transition-colors cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                  Tolak
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">
+                                Tidak ada tindakan
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
