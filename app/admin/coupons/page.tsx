@@ -3,16 +3,14 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import {
   BarChart3,
   CalendarCheck,
-  Check,
-  ChevronRight,
   Edit2,
-  Info,
   Layers,
   LayoutGrid,
-  LogOut,
+  Loader2,
   Menu,
   Percent,
   Plus,
@@ -29,82 +27,114 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import AdminPageTransition from "@/components/admin/AdminPageTransition";
 import { CountUp } from "@/hooks/useCountUp";
+import {
+  useAdminDiskon,
+  useCreateDiskon,
+  useDeleteDiskon,
+  useToggleDiskon,
+  useUpdateDiskon,
+} from "@/hooks/useAdmin";
+import { ApiRequestError, type ApiError } from "@/lib/api";
+import type { Diskon } from "@/types";
 
 // ─── TYPES & INTERFACES ──────────────────────────────────────────────────────────
-export type CouponStatus = "aktif" | "mendatang" | "kedaluwarsa";
+export type CouponStatus = "aktif" | "mendatang" | "kedaluwarsa" | "nonaktif";
 export type FilterTab = "Semua" | "Sedang Aktif" | "Kedaluwarsa" | "Mendatang";
 
-export interface CouponItem {
-  id: number;
-  kode: string;
-  namaEvent: string;
-  persentaseDiskon: number;
-  tanggalMulai: string;
-  tanggalSelesai: string;
-  totalPenggunaan: number;
-  status: CouponStatus;
+// ─── HELPERS ─────────────────────────────────────────────────────────────────────
+/** Backend 4xx envelopes arrive as AxiosError via the BFF proxy. */
+function getApiErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const body = err.response?.data as ApiError | undefined;
+    if (body?.message) return body.message;
+  }
+  if (err instanceof ApiRequestError) return err.message;
+  return err instanceof Error ? err.message : "Terjadi kesalahan. Coba lagi.";
 }
 
-// ─── INITIAL COUPON DATA (PERSIS GAMBAR REFERENSI DESAIN) ────────────────────────
-const INITIAL_COUPONS: CouponItem[] = [
-  {
-    id: 1,
-    kode: "DISKONHEMAT20",
-    namaEvent: "Promo Rutin Tahunan",
-    persentaseDiskon: 20,
-    tanggalMulai: "01 Jan 2026",
-    tanggalSelesai: "31 Des 2026",
-    totalPenggunaan: 8,
-    status: "aktif",
-  },
-  {
-    id: 2,
-    kode: "UKKPROMO50",
-    namaEvent: "Event UKK Spesial",
-    persentaseDiskon: 50,
-    tanggalMulai: "01 Ags 2026",
-    tanggalSelesai: "30 Sep 2026",
-    totalPenggunaan: 5,
-    status: "aktif",
-  },
-  {
-    id: 3,
-    kode: "NOMADBOOST25",
-    namaEvent: "Flash Sale Q4 Bali Hub",
-    persentaseDiskon: 25,
-    tanggalMulai: "01 Okt 2026",
-    tanggalSelesai: "31 Des 2026",
-    totalPenggunaan: 0,
-    status: "mendatang",
-  },
-  {
-    id: 4,
-    kode: "EARLYBIRD10",
-    namaEvent: "Diskon Registrasi Awal Semester",
-    persentaseDiskon: 10,
-    tanggalMulai: "01 Jan 2026",
-    tanggalSelesai: "30 Jun 2026",
-    totalPenggunaan: 14,
-    status: "kedaluwarsa",
-  },
-  {
-    id: 5,
-    kode: "WELCOMEMOKLET",
-    namaEvent: "Voucher Sambutan Member Baru",
-    persentaseDiskon: 15,
-    tanggalMulai: "01 Feb 2026",
-    tanggalSelesai: "31 Mei 2026",
-    totalPenggunaan: 22,
-    status: "kedaluwarsa",
-  },
+const BULAN_SINGKAT = [
+  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+  "Jul", "Agu", "Sep", "Okt", "Nov", "Des",
 ];
 
+/** Format ISO datetime (DiskonResource toIso8601String) → "31 Des 2026". */
+function formatTanggal(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getDate()).padStart(2, "0")} ${BULAN_SINGKAT[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Lokal → "YYYY-MM-DD" tanpa pergeseran zona waktu. */
+function isoDariLokal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function todayIso(): string {
+  return isoDariLokal(new Date());
+}
+
+function isoDalam30Hari(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return isoDariLokal(d);
+}
+
+const formatRupiah = (value: number) => `Rp ${value.toLocaleString("id-ID")}`;
+
+/** Status tampilan: window tanggal menentukan mendatang/kedaluwarsa, flag is_aktif menentukan aktif/nonaktif. */
+function deriveStatus(c: Diskon, now: Date): CouponStatus {
+  const awal = new Date(c.tanggal_awal).getTime();
+  const akhir = new Date(c.tanggal_akhir).getTime();
+  if (!Number.isNaN(akhir) && now.getTime() > akhir) return "kedaluwarsa";
+  if (!Number.isNaN(awal) && now.getTime() < awal) return "mendatang";
+  return c.is_aktif === false ? "nonaktif" : "aktif";
+}
+
+/** Toggle switch is_aktif (dipakai di sel tabel & modal form). */
+function AktifToggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+        checked ? "bg-emerald-500" : "bg-gray-300"
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-[18px]" : "translate-x-[3px]"
+        }`}
+      />
+    </button>
+  );
+}
+
+// ─── PAGE ────────────────────────────────────────────────────────────────────────
 export default function AdminCouponsPage() {
   const router = useRouter();
   const { user, logout } = useAuth();
 
+  // ─── DATA LIVE: GET /admin/diskon ────────────────────────────────────────────
+  const diskonQuery = useAdminDiskon();
+  const coupons = diskonQuery.data ?? [];
+
+  const createDiskon = useCreateDiskon();
+  const updateDiskon = useUpdateDiskon();
+  const deleteDiskon = useDeleteDiskon();
+  const toggleDiskon = useToggleDiskon();
+
   // State operasional
-  const [coupons, setCoupons] = useState<CouponItem[]>(INITIAL_COUPONS);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTab, setSelectedTab] = useState<FilterTab>("Semua");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -114,15 +144,20 @@ export default function AdminCouponsPage() {
   const [formKode, setFormKode] = useState("");
   const [formEvent, setFormEvent] = useState("");
   const [formDiskon, setFormDiskon] = useState("20");
-  const [formMulai, setFormMulai] = useState("01 Nov 2026");
-  const [formSelesai, setFormSelesai] = useState("31 Des 2026");
-  const [formStatus, setFormStatus] = useState<CouponStatus>("aktif");
+  const [formMulai, setFormMulai] = useState(todayIso());
+  const [formSelesai, setFormSelesai] = useState(isoDalam30Hari());
+  const [formMaxPotongan, setFormMaxPotongan] = useState("");
+  const [formUsageLimit, setFormUsageLimit] = useState("");
+  const [formAktif, setFormAktif] = useState(true);
 
-  // Modal Edit
-  const [editingCoupon, setEditingCoupon] = useState<CouponItem | null>(null);
+  // Modal Edit (salinan Diskon yang sedang diedit)
+  const [editingCoupon, setEditingCoupon] = useState<Diskon | null>(null);
 
   // Modal Delete Confirmation
-  const [deletingCoupon, setDeletingCoupon] = useState<CouponItem | null>(null);
+  const [deletingCoupon, setDeletingCoupon] = useState<Diskon | null>(null);
+
+  // Per-row toggle pending indicator
+  const [actingToggleId, setActingToggleId] = useState<number | null>(null);
 
   // Identitas Admin
   const adminName =
@@ -139,90 +174,238 @@ export default function AdminCouponsPage() {
     .toUpperCase();
 
   // ─── METRIC COMPUTATIONS ─────────────────────────────────────────────────────
-  const totalCount = coupons.length;
-  const activeCount = coupons.filter((c) => c.status === "aktif").length;
-  const expiredCount = coupons.filter((c) => c.status === "kedaluwarsa").length;
-  const upcomingCount = coupons.filter((c) => c.status === "mendatang").length;
+  const now = useMemo(() => new Date(), []);
+  const couponsWithStatus = useMemo(
+    () => coupons.map((c) => ({ c, status: deriveStatus(c, now) })),
+    [coupons, now]
+  );
+
+  const totalCount = couponsWithStatus.length;
+  const activeCount = couponsWithStatus.filter(
+    ({ status }) => status === "aktif"
+  ).length;
+  const expiredCount = couponsWithStatus.filter(
+    ({ status }) => status === "kedaluwarsa"
+  ).length;
+  const upcomingCount = couponsWithStatus.filter(
+    ({ status }) => status === "mendatang"
+  ).length;
 
   const avgDiscount = useMemo(() => {
     if (coupons.length === 0) return 0;
-    const sum = coupons.reduce((acc, curr) => acc + curr.persentaseDiskon, 0);
+    const sum = coupons.reduce(
+      (acc, curr) => acc + curr.persentase_diskon,
+      0
+    );
     return Math.round(sum / coupons.length);
   }, [coupons]);
 
   // ─── FILTER LOGIC ────────────────────────────────────────────────────────────
   const filteredCoupons = useMemo(() => {
-    return coupons.filter((c) => {
+    return couponsWithStatus.filter(({ c, status }) => {
       // Filter Status Tab
-      if (selectedTab === "Sedang Aktif" && c.status !== "aktif") return false;
-      if (selectedTab === "Kedaluwarsa" && c.status !== "kedaluwarsa") return false;
-      if (selectedTab === "Mendatang" && c.status !== "mendatang") return false;
+      if (selectedTab === "Sedang Aktif" && status !== "aktif") return false;
+      if (selectedTab === "Kedaluwarsa" && status !== "kedaluwarsa")
+        return false;
+      if (selectedTab === "Mendatang" && status !== "mendatang") return false;
 
       // Filter Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchKode = c.kode.toLowerCase().includes(q);
-        const matchEvent = c.namaEvent.toLowerCase().includes(q);
-        const matchDiskon = `${c.persentaseDiskon}%`.includes(q);
+        const matchKode = c.nama_diskon.toLowerCase().includes(q);
+        const matchEvent = (c.nama_event ?? "").toLowerCase().includes(q);
+        const matchDiskon = `${c.persentase_diskon}%`.includes(q);
         if (!matchKode && !matchEvent && !matchDiskon) return false;
       }
 
       return true;
     });
-  }, [coupons, selectedTab, searchQuery]);
+  }, [couponsWithStatus, selectedTab, searchQuery]);
+
+  // ─── VALIDASI FORM (MIRROR BACKEND UX) ───────────────────────────────────────
+  const validateForm = (
+    kode: string,
+    persentase: number,
+    mulai: string,
+    selesai: string,
+    maxPotongan: string,
+    usageLimit: string,
+    excludeId?: number
+  ): boolean => {
+    if (!kode.trim()) {
+      toast.error("Kode promo tidak boleh kosong.");
+      return false;
+    }
+    if (coupons.some((c) => c.nama_diskon === kode && c.id !== excludeId)) {
+      toast.error(`Nama diskon "${kode}" sudah digunakan.`);
+      return false;
+    }
+    if (!Number.isInteger(persentase) || persentase < 1 || persentase > 100) {
+      toast.error("Persentase diskon harus antara 1 sampai 100.");
+      return false;
+    }
+    if (!mulai || !selesai) {
+      toast.error("Tanggal awal dan tanggal akhir wajib diisi.");
+      return false;
+    }
+    if (selesai <= mulai) {
+      toast.error("Tanggal akhir harus setelah tanggal awal.");
+      return false;
+    }
+    if (maxPotongan !== "" && Number(maxPotongan) < 0) {
+      toast.error("Maksimal potongan minimal 0.");
+      return false;
+    }
+    if (usageLimit !== "" && Number(usageLimit) < 1) {
+      toast.error("Batas pemakaian minimal 1.");
+      return false;
+    }
+    return true;
+  };
 
   // ─── HANDLERS ────────────────────────────────────────────────────────────────
   const handleCreateCoupon = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formKode.trim()) {
-      toast.error("Kode promo tidak boleh kosong.");
-      return;
-    }
 
     const cleanKode = formKode.trim().toUpperCase().replace(/\s+/g, "");
-    // Check duplicate
-    if (coupons.some((c) => c.kode === cleanKode)) {
-      toast.error(`Kode promo "${cleanKode}" sudah pernah dibuat.`);
+    const persen = Number(formDiskon);
+    if (
+      !validateForm(
+        cleanKode,
+        persen,
+        formMulai,
+        formSelesai,
+        formMaxPotongan,
+        formUsageLimit
+      )
+    ) {
       return;
     }
 
-    const newCoupon: CouponItem = {
-      id: Date.now(),
-      kode: cleanKode,
-      namaEvent: formEvent.trim() || "Promosi Khusus Member Moklet",
-      persentaseDiskon: Number(formDiskon) || 10,
-      tanggalMulai: formMulai.trim() || "01 Jan 2026",
-      tanggalSelesai: formSelesai.trim() || "31 Des 2026",
-      totalPenggunaan: 0,
-      status: formStatus,
-    };
-
-    setCoupons((prev) => [newCoupon, ...prev]);
-    toast.success(`Kupon "${newCoupon.kode}" berhasil dibuat!`);
-
-    // Reset Form
-    setFormKode("");
-    setFormEvent("");
-    setFormDiskon("20");
-    setIsCreateModalOpen(false);
+    createDiskon.mutate(
+      {
+        nama_diskon: cleanKode,
+        nama_event: formEvent.trim() || null,
+        persentase_diskon: persen,
+        tanggal_awal: formMulai,
+        tanggal_akhir: formSelesai,
+        max_discount_amount:
+          formMaxPotongan === "" ? null : Number(formMaxPotongan),
+        usage_limit: formUsageLimit === "" ? null : Number(formUsageLimit),
+        is_aktif: formAktif,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Kupon "${cleanKode}" berhasil dibuat!`);
+          // Reset Form
+          setFormKode("");
+          setFormEvent("");
+          setFormDiskon("20");
+          setFormMaxPotongan("");
+          setFormUsageLimit("");
+          setFormAktif(true);
+          setIsCreateModalOpen(false);
+        },
+        onError: (error) => {
+          toast.error(`Gagal membuat kupon: ${getApiErrorMessage(error)}`);
+        },
+      }
+    );
   };
 
   const handleUpdateCoupon = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCoupon) return;
 
-    setCoupons((prev) =>
-      prev.map((c) => (c.id === editingCoupon.id ? editingCoupon : c))
+    const persen = Number(editingCoupon.persentase_diskon);
+    const mulai = editingCoupon.tanggal_awal.slice(0, 10);
+    const selesai = editingCoupon.tanggal_akhir.slice(0, 10);
+    const maxPotongan =
+      editingCoupon.max_discount_amount == null
+        ? ""
+        : String(editingCoupon.max_discount_amount);
+    const usageLimit =
+      editingCoupon.usage_limit == null
+        ? ""
+        : String(editingCoupon.usage_limit);
+
+    if (
+      !validateForm(
+        editingCoupon.nama_diskon,
+        persen,
+        mulai,
+        selesai,
+        maxPotongan,
+        usageLimit,
+        editingCoupon.id
+      )
+    ) {
+      return;
+    }
+
+    const kode = editingCoupon.nama_diskon;
+    updateDiskon.mutate(
+      {
+        id: editingCoupon.id,
+        nama_event: (editingCoupon.nama_event ?? "").trim() || null,
+        persentase_diskon: persen,
+        tanggal_awal: mulai,
+        tanggal_akhir: selesai,
+        max_discount_amount: editingCoupon.max_discount_amount ?? null,
+        usage_limit: editingCoupon.usage_limit ?? null,
+        is_aktif: editingCoupon.is_aktif ?? true,
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            `Perubahan kupon "${kode}" berhasil disimpan!`
+          );
+          setEditingCoupon(null);
+        },
+        onError: (error) => {
+          toast.error(`Gagal menyimpan kupon: ${getApiErrorMessage(error)}`);
+        },
+      }
     );
-    toast.success(`Perubahan kupon "${editingCoupon.kode}" berhasil disimpan!`);
-    setEditingCoupon(null);
+  };
+
+  const handleToggleCoupon = (coupon: Diskon) => {
+    setActingToggleId(coupon.id);
+    toggleDiskon.mutate(
+      { id: coupon.id, is_aktif: !coupon.is_aktif },
+      {
+        onSuccess: () => {
+          toast.success(
+            `Kupon "${coupon.nama_diskon}" ${
+              !coupon.is_aktif ? "diaktifkan" : "dinonaktifkan"
+            }.`
+          );
+        },
+        onError: (error) => {
+          toast.error(
+            `Gagal mengubah status kupon: ${getApiErrorMessage(error)}`
+          );
+        },
+        onSettled: () => {
+          setActingToggleId(null);
+        },
+      }
+    );
   };
 
   const handleDeleteCoupon = () => {
     if (!deletingCoupon) return;
-    setCoupons((prev) => prev.filter((c) => c.id !== deletingCoupon.id));
-    toast.success(`Kupon "${deletingCoupon.kode}" berhasil dihapus.`);
-    setDeletingCoupon(null);
+
+    const kode = deletingCoupon.nama_diskon;
+    deleteDiskon.mutate(deletingCoupon.id, {
+      onSuccess: () => {
+        toast.success(`Kupon "${kode}" berhasil dihapus.`);
+        setDeletingCoupon(null);
+      },
+      onError: (error) => {
+        toast.error(`Gagal menghapus kupon: ${getApiErrorMessage(error)}`);
+      },
+    });
   };
 
   const handleLogout = async () => {
@@ -449,7 +632,7 @@ export default function AdminCouponsPage() {
               </span>
             </div>
             <span className="text-xs text-gray-400 font-medium">
-              Kisaran promo 20% hingga 50%
+              Dihitung dari {totalCount} kupon terdaftar
             </span>
           </div>
 
@@ -567,6 +750,9 @@ export default function AdminCouponsPage() {
                     PERIODE BERLAKU
                   </th>
                   <th className="text-[10px] font-bold text-gray-400 uppercase tracking-wider py-4 px-4">
+                    MAKS POTONGAN
+                  </th>
+                  <th className="text-[10px] font-bold text-gray-400 uppercase tracking-wider py-4 px-4">
                     PENGGUNAAN
                   </th>
                   <th className="text-[10px] font-bold text-gray-400 uppercase tracking-wider py-4 px-4">
@@ -578,17 +764,38 @@ export default function AdminCouponsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
-                {filteredCoupons.length === 0 ? (
+                {diskonQuery.isLoading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-gray-400">
+                    <td colSpan={7} className="py-12 text-center text-gray-400">
+                      <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                      Memuat kupon promo...
+                    </td>
+                  </tr>
+                ) : diskonQuery.isError ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                      Gagal memuat kupon: {getApiErrorMessage(diskonQuery.error)}
+                    </td>
+                  </tr>
+                ) : filteredCoupons.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-gray-400">
                       Tidak ada kupon atau voucher promo yang cocok dengan kriteria pencarian.
                     </td>
                   </tr>
                 ) : (
-                  filteredCoupons.map((coupon) => {
-                    const isExpired = coupon.status === "kedaluwarsa";
-                    const isUpcoming = coupon.status === "mendatang";
-                    const isActive = coupon.status === "aktif";
+                  filteredCoupons.map(({ c: coupon, status }) => {
+                    const isExpired = status === "kedaluwarsa";
+                    const isUpcoming = status === "mendatang";
+                    const isInactive = status === "nonaktif";
+                    const isActive = status === "aktif";
+
+                    const usageLimit = coupon.usage_limit ?? null;
+                    const timesUsed = coupon.times_used ?? 0;
+                    const usagePercent =
+                      usageLimit && usageLimit > 0
+                        ? Math.min(100, Math.round((timesUsed / usageLimit) * 100))
+                        : null;
 
                     return (
                       <tr
@@ -597,14 +804,14 @@ export default function AdminCouponsPage() {
                           isExpired ? "opacity-60 hover:opacity-100" : ""
                         }`}
                       >
-                        {/* Kolom 1: KODE PROMO */}
+                        {/* Kolom 1: KODE PROMO + NAMA EVENT */}
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-3">
                             <div
                               className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
                                 isActive
                                   ? "bg-purple-50 text-[#5E43F3]"
-                                  : isUpcoming
+                                  : isUpcoming || isInactive
                                   ? "bg-gray-100 text-gray-600"
                                   : "bg-gray-100 text-gray-400"
                               }`}
@@ -619,10 +826,10 @@ export default function AdminCouponsPage() {
                                     : "text-[#111827]"
                                 }`}
                               >
-                                {coupon.kode}
+                                {coupon.nama_diskon}
                               </span>
                               <span className="text-[10px] text-gray-400 block mt-0.5">
-                                {coupon.namaEvent}
+                                {coupon.nama_event ?? "Promo Khusus Member"}
                               </span>
                             </div>
                           </div>
@@ -634,12 +841,12 @@ export default function AdminCouponsPage() {
                             className={`font-mono text-xs ${
                               isExpired
                                 ? "text-gray-400 font-normal"
-                                : coupon.persentaseDiskon >= 50
+                                : coupon.persentase_diskon >= 50
                                 ? "text-[#5E43F3] font-bold"
                                 : "text-[#111827] font-bold"
                             }`}
                           >
-                            {coupon.persentaseDiskon}%
+                            {coupon.persentase_diskon}%
                           </span>
                         </td>
 
@@ -650,53 +857,98 @@ export default function AdminCouponsPage() {
                               isExpired ? "text-gray-400" : "text-gray-600"
                             }`}
                           >
-                            {coupon.tanggalMulai} – {coupon.tanggalSelesai}
+                            {formatTanggal(coupon.tanggal_awal)} – {formatTanggal(coupon.tanggal_akhir)}
                           </span>
                         </td>
 
-                        {/* Kolom 4: PENGGUNAAN */}
+                        {/* Kolom 4: MAKS POTONGAN */}
                         <td className="py-4 px-4">
                           <span
                             className={`text-xs ${
-                              isExpired
-                                ? "text-gray-400"
-                                : isUpcoming
-                                ? "text-gray-400"
-                                : "text-gray-600 font-medium"
+                              isExpired ? "text-gray-400" : "text-gray-600"
                             }`}
                           >
-                            {coupon.totalPenggunaan === 0 && isUpcoming
-                              ? "0 Kali (Belum Berjalan)"
-                              : `${coupon.totalPenggunaan} Kali Transaksi`}
+                            {coupon.max_discount_amount != null
+                              ? formatRupiah(coupon.max_discount_amount)
+                              : "—"}
                           </span>
                         </td>
 
-                        {/* Kolom 5: STATUS */}
+                        {/* Kolom 5: PENGGUNAAN (times_used / usage_limit progress) */}
                         <td className="py-4 px-4">
-                          {isActive && (
-                            <span className="text-xs font-semibold text-emerald-600">
-                              Sedang Aktif
+                          <div className="flex flex-col gap-1.5">
+                            <span
+                              className={`text-xs ${
+                                isExpired || (isUpcoming && timesUsed === 0)
+                                  ? "text-gray-400"
+                                  : "text-gray-600 font-medium"
+                              }`}
+                            >
+                              {timesUsed} Kali Transaksi
                             </span>
-                          )}
-                          {isUpcoming && (
-                            <span className="text-xs font-semibold text-blue-600">
-                              Mendatang
-                            </span>
-                          )}
-                          {isExpired && (
-                            <span className="text-xs font-medium text-gray-400">
-                              Kedaluwarsa
-                            </span>
-                          )}
+                            {usagePercent !== null && usageLimit !== null && (
+                              <>
+                                <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      usagePercent >= 100 ? "bg-rose-500" : "bg-[#5E43F3]"
+                                    }`}
+                                    style={{ width: `${usagePercent}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-gray-400">
+                                  {timesUsed} dari {usageLimit} batas pemakaian
+                                  {usagePercent >= 100 ? " (habis)" : ""}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </td>
 
-                        {/* Kolom 6: AKSI */}
+                        {/* Kolom 6: STATUS + TOGGLE is_aktif */}
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col items-start gap-1.5">
+                            {isActive && (
+                              <span className="text-xs font-semibold text-emerald-600">
+                                Sedang Aktif
+                              </span>
+                            )}
+                            {isUpcoming && (
+                              <span className="text-xs font-semibold text-blue-600">
+                                Mendatang
+                              </span>
+                            )}
+                            {isInactive && (
+                              <span className="text-xs font-semibold text-amber-600">
+                                Nonaktif
+                              </span>
+                            )}
+                            {isExpired && (
+                              <span className="text-xs font-medium text-gray-400">
+                                Kedaluwarsa
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1.5">
+                              <AktifToggle
+                                checked={coupon.is_aktif ?? true}
+                                disabled={actingToggleId === coupon.id}
+                                onChange={() => handleToggleCoupon(coupon)}
+                              />
+                              <span className="text-[10px] font-semibold text-gray-400">
+                                {coupon.is_aktif ?? true ? "Aktif" : "Nonaktif"}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Kolom 7: AKSI */}
                         <td className="py-4 px-6 text-right space-y-0.5">
                           <button
                             type="button"
                             onClick={() => setEditingCoupon(coupon)}
-                            className="text-xs font-medium text-[#5E43F3] hover:text-[#4A32D6] active:scale-95 transition-transform duration-100 block ml-auto cursor-pointer"
+                            className="text-xs font-medium text-[#5E43F3] hover:text-[#4A32D6] active:scale-95 transition-transform duration-100 inline-flex items-center justify-end gap-1 ml-auto cursor-pointer"
                           >
+                            <Edit2 className="w-3 h-3" />
                             Edit
                           </button>
                           <button
@@ -759,7 +1011,7 @@ export default function AdminCouponsPage() {
             className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
             onClick={() => setIsCreateModalOpen(false)}
           />
-          <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl z-10 border border-gray-100">
+          <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl z-10 border border-gray-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div>
                 <h3 className="text-lg font-bold text-[#111827]">
@@ -779,14 +1031,15 @@ export default function AdminCouponsPage() {
             </div>
 
             <form onSubmit={handleCreateCoupon} className="space-y-4 pt-5 text-xs">
-              {/* Kode Promo */}
+              {/* Kode Promo (nama_diskon — unik) */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  Kode Promo (Kapital Otomatis)
+                  Kode Promo (Kapital Otomatis, Unik)
                 </label>
                 <input
                   type="text"
                   required
+                  maxLength={100}
                   value={formKode}
                   onChange={(e) => setFormKode(e.target.value.toUpperCase())}
                   placeholder="CONTOH: MOKLETSALE20"
@@ -802,6 +1055,7 @@ export default function AdminCouponsPage() {
                 <input
                   type="text"
                   required
+                  maxLength={100}
                   value={formEvent}
                   onChange={(e) => setFormEvent(e.target.value)}
                   placeholder="Misal: Flash Sale Kolaborasi Q4"
@@ -809,11 +1063,11 @@ export default function AdminCouponsPage() {
                 />
               </div>
 
-              {/* Besaran Diskon & Status */}
+              {/* Besaran Diskon & Status Aktif */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                    Besaran Diskon (%)
+                    Besaran Diskon (1–100%)
                   </label>
                   <div className="relative flex items-center">
                     <input
@@ -831,17 +1085,17 @@ export default function AdminCouponsPage() {
 
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                    Status Kupon
+                    Status Aktif
                   </label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as CouponStatus)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
-                  >
-                    <option value="aktif">Sedang Aktif</option>
-                    <option value="mendatang">Mendatang</option>
-                    <option value="kedaluwarsa">Kedaluwarsa</option>
-                  </select>
+                  <div className="flex items-center gap-2.5 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
+                    <AktifToggle
+                      checked={formAktif}
+                      onChange={(next) => setFormAktif(next)}
+                    />
+                    <span className="font-medium text-gray-600">
+                      {formAktif ? "Bisa diklaim member" : "Sementara nonaktif"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -852,10 +1106,10 @@ export default function AdminCouponsPage() {
                     Tanggal Mulai Berlaku
                   </label>
                   <input
-                    type="text"
+                    type="date"
+                    required
                     value={formMulai}
                     onChange={(e) => setFormMulai(e.target.value)}
-                    placeholder="01 Jan 2026"
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-gray-700 focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                   />
                 </div>
@@ -865,10 +1119,43 @@ export default function AdminCouponsPage() {
                     Tanggal Berakhir
                   </label>
                   <input
-                    type="text"
+                    type="date"
+                    required
                     value={formSelesai}
                     onChange={(e) => setFormSelesai(e.target.value)}
-                    placeholder="31 Des 2026"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-gray-700 focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Opsional: Maks Potongan & Batas Pemakaian */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                    Maksimal Potongan (Rp, Opsional)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={formMaxPotongan}
+                    onChange={(e) => setFormMaxPotongan(e.target.value)}
+                    placeholder="Misal: 50000"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-gray-700 focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                    Batas Pemakaian (Opsional)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={formUsageLimit}
+                    onChange={(e) => setFormUsageLimit(e.target.value)}
+                    placeholder="Misal: 100"
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-gray-700 focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                   />
                 </div>
@@ -885,9 +1172,13 @@ export default function AdminCouponsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#5E43F3] hover:bg-[#4A32D6] text-white font-bold shadow-md cursor-pointer transition-transform active:scale-98"
+                  disabled={createDiskon.isPending}
+                  className="px-6 py-2.5 rounded-xl bg-[#5E43F3] hover:bg-[#4A32D6] text-white font-bold shadow-md cursor-pointer transition-transform active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
                 >
-                  Simpan Kupon Baru
+                  {createDiskon.isPending && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  {createDiskon.isPending ? "Menyimpan..." : "Simpan Kupon Baru"}
                 </button>
               </div>
             </form>
@@ -902,14 +1193,14 @@ export default function AdminCouponsPage() {
             className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
             onClick={() => setEditingCoupon(null)}
           />
-          <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl z-10 border border-gray-100">
+          <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl z-10 border border-gray-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div>
                 <h3 className="text-lg font-bold text-[#111827]">
                   Edit Kupon Promo
                 </h3>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Perbarui parameter diskon atau masa berlaku voucher {editingCoupon.kode}
+                  Perbarui parameter diskon atau masa berlaku voucher {editingCoupon.nama_diskon}
                 </p>
               </div>
               <button
@@ -922,46 +1213,47 @@ export default function AdminCouponsPage() {
             </div>
 
             <form onSubmit={handleUpdateCoupon} className="space-y-4 pt-5 text-xs">
+              {/* Kode Promo (readonly — unik di backend) */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Kode Promo
                 </label>
                 <input
                   type="text"
-                  required
-                  value={editingCoupon.kode}
-                  onChange={(e) =>
-                    setEditingCoupon({
-                      ...editingCoupon,
-                      kode: e.target.value.toUpperCase(),
-                    })
-                  }
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono font-bold text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
+                  disabled
+                  value={editingCoupon.nama_diskon}
+                  className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 font-mono font-bold text-gray-400 cursor-not-allowed"
                 />
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Kode promo bersifat unik dan tidak dapat diubah.
+                </p>
               </div>
 
+              {/* Nama Event / Deskripsi */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Nama Event / Deskripsi Promo
                 </label>
                 <input
                   type="text"
-                  required
-                  value={editingCoupon.namaEvent}
+                  maxLength={100}
+                  value={editingCoupon.nama_event ?? ""}
                   onChange={(e) =>
                     setEditingCoupon({
                       ...editingCoupon,
-                      namaEvent: e.target.value,
+                      nama_event: e.target.value,
                     })
                   }
+                  placeholder="Misal: Flash Sale Kolaborasi Q4"
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                 />
               </div>
 
+              {/* Besaran Diskon & Status Aktif */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                    Besaran Diskon (%)
+                    Besaran Diskon (1–100%)
                   </label>
                   <div className="relative flex items-center">
                     <input
@@ -969,11 +1261,11 @@ export default function AdminCouponsPage() {
                       required
                       min="1"
                       max="100"
-                      value={editingCoupon.persentaseDiskon}
+                      value={editingCoupon.persentase_diskon}
                       onChange={(e) =>
                         setEditingCoupon({
                           ...editingCoupon,
-                          persentaseDiskon: Number(e.target.value),
+                          persentase_diskon: Number(e.target.value),
                         })
                       }
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-4 pr-9 py-2.5 font-mono font-bold text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
@@ -984,37 +1276,41 @@ export default function AdminCouponsPage() {
 
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                    Status Kupon
+                    Status Aktif
                   </label>
-                  <select
-                    value={editingCoupon.status}
-                    onChange={(e) =>
-                      setEditingCoupon({
-                        ...editingCoupon,
-                        status: e.target.value as CouponStatus,
-                      })
-                    }
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-[#111827] focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
-                  >
-                    <option value="aktif">Sedang Aktif</option>
-                    <option value="mendatang">Mendatang</option>
-                    <option value="kedaluwarsa">Kedaluwarsa</option>
-                  </select>
+                  <div className="flex items-center gap-2.5 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
+                    <AktifToggle
+                      checked={editingCoupon.is_aktif ?? true}
+                      onChange={(next) =>
+                        setEditingCoupon({
+                          ...editingCoupon,
+                          is_aktif: next,
+                        })
+                      }
+                    />
+                    <span className="font-medium text-gray-600">
+                      {(editingCoupon.is_aktif ?? true)
+                        ? "Bisa diklaim member"
+                        : "Sementara nonaktif"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
+              {/* Rentang Periode */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                     Tanggal Mulai Berlaku
                   </label>
                   <input
-                    type="text"
-                    value={editingCoupon.tanggalMulai}
+                    type="date"
+                    required
+                    value={editingCoupon.tanggal_awal.slice(0, 10)}
                     onChange={(e) =>
                       setEditingCoupon({
                         ...editingCoupon,
-                        tanggalMulai: e.target.value,
+                        tanggal_awal: e.target.value,
                       })
                     }
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-gray-700 focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
@@ -1026,14 +1322,60 @@ export default function AdminCouponsPage() {
                     Tanggal Berakhir
                   </label>
                   <input
-                    type="text"
-                    value={editingCoupon.tanggalSelesai}
+                    type="date"
+                    required
+                    value={editingCoupon.tanggal_akhir.slice(0, 10)}
                     onChange={(e) =>
                       setEditingCoupon({
                         ...editingCoupon,
-                        tanggalSelesai: e.target.value,
+                        tanggal_akhir: e.target.value,
                       })
                     }
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-gray-700 focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Opsional: Maks Potongan & Batas Pemakaian */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                    Maksimal Potongan (Rp, Opsional)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editingCoupon.max_discount_amount ?? ""}
+                    onChange={(e) =>
+                      setEditingCoupon({
+                        ...editingCoupon,
+                        max_discount_amount:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    placeholder="Misal: 50000"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-gray-700 focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                    Batas Pemakaian (Opsional)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={editingCoupon.usage_limit ?? ""}
+                    onChange={(e) =>
+                      setEditingCoupon({
+                        ...editingCoupon,
+                        usage_limit:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    placeholder="Misal: 100"
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-mono text-gray-700 focus:bg-white focus:border-[#5E43F3] focus:ring-2 focus:ring-[#5E43F3]/20 focus:outline-none"
                   />
                 </div>
@@ -1049,9 +1391,13 @@ export default function AdminCouponsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#111827] hover:bg-black text-white font-bold shadow-md cursor-pointer transition-transform active:scale-98"
+                  disabled={updateDiskon.isPending}
+                  className="px-6 py-2.5 rounded-xl bg-[#111827] hover:bg-black text-white font-bold shadow-md cursor-pointer transition-transform active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
                 >
-                  Simpan Perubahan
+                  {updateDiskon.isPending && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  {updateDiskon.isPending ? "Menyimpan..." : "Simpan Perubahan"}
                 </button>
               </div>
             </form>
@@ -1077,7 +1423,7 @@ export default function AdminCouponsPage() {
             <p className="text-xs text-gray-500 mt-1 mb-6">
               Apakah Anda yakin ingin menghapus kupon{" "}
               <strong className="text-black font-mono font-bold">
-                {deletingCoupon.kode}
+                {deletingCoupon.nama_diskon}
               </strong>
               ? Kupon tidak akan bisa diklaim lagi oleh member pada form checkout.
             </p>
@@ -1093,9 +1439,13 @@ export default function AdminCouponsPage() {
               <button
                 type="button"
                 onClick={handleDeleteCoupon}
-                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md cursor-pointer text-xs"
+                disabled={deleteDiskon.isPending}
+                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md cursor-pointer text-xs disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
               >
-                Ya, Hapus Kupon
+                {deleteDiskon.isPending && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                )}
+                {deleteDiskon.isPending ? "Menghapus..." : "Ya, Hapus Kupon"}
               </button>
             </div>
           </div>
