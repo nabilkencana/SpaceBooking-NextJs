@@ -2,12 +2,17 @@
 
 export type Role = "member" | "admin_space";
 
-export type SpaceType = "desk" | "meeting_room" | "private_office";
+export type SpaceType =
+  | "desk"
+  | "meeting_room"
+  | "private_office"
+  | "focus_pod";
 
 export const SPACE_TYPE_LABELS: Record<SpaceType, string> = {
   desk: "Personal Desk",
   meeting_room: "Meeting Room",
   private_office: "Private Office",
+  focus_pod: "Focus Pod",
 };
 
 export type ReservasiStatus =
@@ -24,6 +29,24 @@ export const STATUS_LABELS: Record<ReservasiStatus, string> = {
   selesai: "Selesai",
   dibatalkan: "Dibatalkan",
 };
+
+export type PaymentMethod = "qris" | "virtual_account" | "manual_transfer";
+
+export type PaymentStatus = "unpaid" | "paid" | "refunded";
+
+// ─── Pagination ───────────────────────────────────────────────────────────
+
+export interface PaginatedMeta {
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface Paginated<T> {
+  items: T[];
+  meta: PaginatedMeta;
+}
 
 // ─── Auth & User ──────────────────────────────────────────────────────────
 
@@ -56,6 +79,10 @@ export interface SpaceOwner {
   telp: string;
   alamat: string;
   deskripsi: string;
+  hotline: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -73,9 +100,16 @@ export interface Space {
   id: number;
   id_owner: number;
   nama_space: string;
+  slug: string | null;
   harga_per_jam: number;
   tipe: SpaceType;
   kapasitas: number;
+  zona_lantai: string | null;
+  wifi_speed: number | null;
+  ukuran_m2: string | null;
+  badge: string | null;
+  amenities: (string | null)[] | null;
+  photos: string[] | null;
   deskripsi: string;
   foto: string | null;
   foto_url: string | null;
@@ -87,9 +121,16 @@ export interface SpaceDetail {
   id: number;
   id_owner: number;
   nama_space: string;
+  slug: string | null;
   harga_per_jam: number;
   tipe: SpaceType;
   kapasitas: number;
+  zona_lantai: string | null;
+  wifi_speed: number | null;
+  ukuran_m2: string | null;
+  badge: string | null;
+  amenities: (string | null)[] | null;
+  photos: string[] | null;
   deskripsi: string;
   foto: string | null;
   foto_url: string | null;
@@ -126,6 +167,11 @@ export interface Diskon {
   tanggal_awal: string;
   tanggal_akhir: string;
   is_active: boolean;
+  nama_event?: string | null;
+  max_discount_amount?: number | null;
+  usage_limit?: number | null;
+  times_used?: number;
+  is_aktif?: boolean;
 }
 
 // ─── Reservasi ────────────────────────────────────────────────────────────
@@ -170,7 +216,10 @@ export interface Reservasi {
   harga_per_jam: number;
   total_harga_awal: number;
   potongan_diskon: number;
+  biaya_layanan: number;
   total_bayar: number;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus;
   status: ReservasiStatus;
   check_in_at: string | null;
   check_out_at: string | null;
@@ -193,7 +242,10 @@ export interface ReservasiDetail {
   harga_per_jam: number;
   total_harga_awal: number;
   potongan_diskon: number;
+  biaya_layanan: number;
   total_bayar: number;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus;
   status: ReservasiStatus;
   check_in_at: string | null;
   check_out_at: string | null;
@@ -284,6 +336,24 @@ export interface CreateReservasiPayload {
   durasi_jam: number;
   id_diskon?: number | null;
   kode_promo?: string | null;
+  payment_method?: PaymentMethod;
+}
+
+// ─── Coupon Validation ────────────────────────────────────────────────────
+
+export interface ValidateCouponPayload {
+  kode: string;
+  subtotal?: number;
+}
+
+export interface ValidateCouponResponse {
+  id: number;
+  nama_diskon: string;
+  persentase_diskon: number;
+  tanggal_awal: string;
+  tanggal_akhir: string;
+  is_active: boolean;
+  potongan?: number;
 }
 
 // ─── Availability ─────────────────────────────────────────────────────────

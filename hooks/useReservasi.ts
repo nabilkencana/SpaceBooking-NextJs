@@ -17,8 +17,9 @@ export const reservasiKeys = {
   all: ["reservasi"] as const,
   my: ["reservasi", "my"] as const,
   detail: (id: number) => ["reservasi", id] as const,
-  history: (month: number, year: number) =>
-    ["reservasi", "history", month, year] as const,
+  history: (
+    filters: Record<string, string | number | null | undefined>,
+  ) => ["reservasi", "history", filters] as const,
   eTicket: (id: number) => ["reservasi", id, "e-ticket"] as const,
 };
 
@@ -51,7 +52,7 @@ export function useReservation(id: number) {
 
 export function useHistory(month: number, year: number) {
   return useQuery({
-    queryKey: reservasiKeys.history(month, year),
+    queryKey: reservasiKeys.history({ month, year }),
     queryFn: async () => {
       const { data } = await apiClient.get("/reservasi/my/history", {
         params: { month, year },
@@ -59,6 +60,18 @@ export function useHistory(month: number, year: number) {
       return unwrapApi<HistoryResponse>({ data });
     },
     enabled: !!month && !!year,
+  });
+}
+
+export function useMyHistory(month?: number, year?: number) {
+  return useQuery({
+    queryKey: reservasiKeys.history({ month: month ?? null, year: year ?? null }),
+    queryFn: async () => {
+      const { data } = await apiClient.get("/reservasi/my/history", {
+        params: { month, year },
+      });
+      return unwrapApi<HistoryResponse>({ data });
+    },
   });
 }
 

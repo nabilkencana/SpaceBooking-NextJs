@@ -3,7 +3,11 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { unwrapApi } from "@/lib/api";
-import type { Diskon } from "@/types";
+import type {
+  Diskon,
+  ValidateCouponPayload,
+  ValidateCouponResponse,
+} from "@/types";
 
 // ─── Query keys ────────────────────────────────────────────────────────────
 
@@ -36,6 +40,18 @@ export function useCheckDiskon() {
     mutationFn: async (kode_promo: string) => {
       const { data } = await apiClient.post("/diskon/check", { kode_promo });
       return unwrapApi<CheckDiskonResponse>({ data });
+    },
+  });
+}
+
+export function useValidateCoupon() {
+  return useMutation({
+    mutationFn: async ({ kode, subtotal }: ValidateCouponPayload) => {
+      const { data } = await apiClient.post("/diskon/check", {
+        kode,
+        subtotal,
+      });
+      return unwrapApi<ValidateCouponResponse>({ data });
     },
   });
 }

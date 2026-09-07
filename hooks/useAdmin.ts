@@ -10,7 +10,10 @@ import type {
   IncomeReport,
   MonthlyReport,
   Reservasi,
+  ReservasiDetail,
+  ReservasiStatus,
   Space,
+  SpaceOwner,
 } from "@/types";
 
 // ─── Payload types ─────────────────────────────────────────────────────────
@@ -30,15 +33,38 @@ export interface UpdateMemberPayload
   password?: string;
 }
 
+export interface AdminReservationFilters {
+  month?: number;
+  year?: number;
+  status?: ReservasiStatus;
+  id_space?: number;
+  tanggal?: string;
+}
+
+export interface UpdateLocationProfilePayload {
+  nama_coworking?: string;
+  nama_pemilik?: string;
+  telp?: string;
+  hotline?: string | null;
+  alamat?: string | null;
+  deskripsi?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  is_public?: boolean;
+}
+
 // ─── Query keys ────────────────────────────────────────────────────────────
 
 export const adminKeys = {
   profile: ["admin", "profile"] as const,
-  members: ["admin", "members"] as const,
+  publicLocation: ["location", "profile"] as const,
+  members: (filters?: Record<string, string | number | null | undefined>) =>
+    ["admin", "members", filters] as const,
   member: (id: number) => ["admin", "members", id] as const,
   spaces: ["admin", "spaces"] as const,
-  reservations: (filters?: Record<string, string | number>) =>
-    ["admin", "reservations", filters] as const,
+  reservations: (
+    filters?: Record<string, string | number | null | undefined>,
+  ) => ["admin", "reservations", filters] as const,
   reports: (type: string, month: number, year: number) =>
     ["admin", "reports", type, month, year] as const,
 };
@@ -77,9 +103,21 @@ export function useUpdateAdminProfile() {
 
 export function useMembers() {
   return useQuery({
-    queryKey: adminKeys.members,
+    queryKey: adminKeys.members(),
     queryFn: async () => {
       const { data } = await apiClient.get("/admin/members");
+      return unwrapApi<Member[]>({ data });
+    },
+  });
+}
+
+export function useAdminMembers(search?: string) {
+  return useQuery({
+    queryKey: adminKeys.members({ search: search || null }),
+    queryFn: async () => {
+      const { data } = await apiClient.get("/admin/members", {
+        params: search ? { search } : undefined,
+      });
       return unwrapApi<Member[]>({ data });
     },
   });
@@ -109,7 +147,7 @@ export function useCreateMember() {
       return unwrapApi<Member>({ data });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: adminKeys.members });
+      qc.invalidateQueries({ queryKey: adminKeys.members() });
     },
   });
 }
@@ -128,7 +166,7 @@ export function useUpdateMember() {
       return unwrapApi<Member>({ data });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: adminKeys.members });
+      qc.invalidateQueries({ queryKey: adminKeys.members() });
     },
   });
 }
@@ -143,7 +181,7 @@ export function useDeleteMember() {
       return unwrapApi<{ message: string }>({ data });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: adminKeys.members });
+      qc.invalidateQueries({ queryKey: adminKeys.members() });
     },
   });
 }
@@ -156,7 +194,7 @@ export function useDashboardStats() {
   const year = now.getFullYear();
 
   const members = useQuery({
-    queryKey: adminKeys.members,
+    queryKey: adminKeys.members(),
     queryFn: async () => {
       const { data } = await apiClient.get("/admin/members");
       return unwrapApi<Member[]>({ data });
@@ -247,21 +285,21 @@ export function useIncomeReport(month: number, year: number) {
 
 export interface CreateSpacePayload {
   nama_space: string;
-  tipe: string;
+  tipe: Space["tipe"];
   harga_per_jam: number;
   kapasitas: number;
   deskripsi: string;
   foto?: string | null;
+  zona_lantai?: string | null;
+  wifi_speed?: number | null;
+  ukuran_m2?: number | string | null;
+  badge?: string | null;
+  amenities?: string[];
+  photos?: string[];
 }
 
-export interface UpdateSpacePayload {
-  nama_space?: string;
-  tipe?: string;
-  harga_per_jam?: number;
-  kapasitas?: number;
-  deskripsi?: string;
-  foto?: string | null;
-}
+export interface UpdateSpacePayload
+  extends Partial<CreateSpacePayload> {}
 
 export function useAdminSpaces() {
   return useQuery({
@@ -347,9 +385,13 @@ export function useUploadSpaceFoto() {
 
 export interface CreateDiskonPayload {
   nama_diskon: string;
+  nama_event?: string | null;
   persentase_diskon: number;
   tanggal_awal: string;
   tanggal_akhir: string;
+  max_discount_amount?: number | null;
+  usage_limit?: number | null;
+  is_aktif?: boolean;
 }
 
 export interface UpdateDiskonPayload
@@ -415,4 +457,169 @@ export function useDeleteDiskon() {
       qc.invalidateQueries({ queryKey: adminDiskonKeys.all });
     },
   });
+}
+
+export function useToggleDiskon() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, is_aktif }: { id: number; is_aktif: boolean }) => {
+      const { data } = await apiClient.put(`/admin/diskon/${id}`, {
+        is_aktif,
+      });
+      return unwrapApi<Diskon>({ data });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminDiskonKeys.all });
+    },
+  });
+}
+
+// ─── Location (admin profile + public) ─────────────────────────────────────
+
+export function useLocationProfile() {
+  return useQuery({
+    queryKey: adminKeys.profile,
+    queryFn: async () => {
+      const { data } = await apiClient.get("/admin/profile");
+      return unwrapApi<AdminProfile>({ data });
+    },
+  });
+}
+
+export function useUpdateLocationProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: UpdateLocationProfilePayload) => {
+      const { data } = await apiClient.put("/admin/profile", payload);
+      return unwrapApi<AdminProfile>({ data });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.profile });
+      qc.invalidateQueries({ queryKey: adminKeys.publicLocation });
+    },
+  });
+}
+
+export function usePublicLocation() {
+  return useQuery({
+    queryKey: adminKeys.publicLocation,
+    queryFn: async () => {
+      const { data } = await apiClient.get("/location/profile");
+      return unwrapApi<SpaceOwner>({ data });
+    },
+  });
+}
+
+// ─── Admin reservations ────────────────────────────────────────────────────
+
+export function useAdminReservations(filters?: AdminReservationFilters) {
+  const hasFilters =
+    filters &&
+    Object.values(filters).some((value) => value !== undefined && value !== "");
+
+  return useQuery({
+    queryKey: adminKeys.reservations(
+      hasFilters ? (filters as Record<string, string | number>) : undefined,
+    ),
+    queryFn: async () => {
+      const { data } = await apiClient.get("/admin/reservasi", {
+        params: filters,
+      });
+      return unwrapApi<Reservasi[]>({ data });
+    },
+  });
+}
+
+export function useReservationAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      status,
+    }: {
+      id: number;
+      status: ReservasiStatus;
+    }) => {
+      const { data } = await apiClient.patch(
+        `/admin/reservasi/${id}/status`,
+        { status },
+      );
+      return unwrapApi<{ id: number; status: ReservasiStatus }>({ data });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "reservations"] as const });
+    },
+  });
+}
+
+export function useCheckIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const { data } = await apiClient.post(`/admin/reservasi/${id}/check-in`);
+      return unwrapApi<{
+        id: number;
+        status: ReservasiStatus;
+        check_in_time: string;
+      }>({ data });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "reservations"] as const });
+    },
+  });
+}
+
+export function useCheckOut() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const { data } = await apiClient.post(
+        `/admin/reservasi/${id}/check-out`,
+      );
+      return unwrapApi<{
+        id: number;
+        status: ReservasiStatus;
+        check_out_time: string;
+      }>({ data });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "reservations"] as const });
+    },
+  });
+}
+
+export function useVerifyQr() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const { data } = await apiClient.post("/admin/reservasi/verify-qr", {
+        token,
+      });
+      return unwrapApi<ReservasiDetail>({ data });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "reservations"] as const });
+    },
+  });
+}
+
+export function usePendingCount() {
+  return useQuery({
+    queryKey: adminKeys.reservations({ status: "belum_dikonfirm" }),
+    queryFn: async () => {
+      const { data } = await apiClient.get("/admin/reservasi", {
+        params: { status: "belum_dikonfirm" },
+      });
+      return unwrapApi<Reservasi[]>({ data });
+    },
+    select: (reservations) => reservations.length,
+  });
+}
+
+// ─── Reports ───────────────────────────────────────────────────────────────
+
+export function useReports(month: number, year: number) {
+  const monthly = useMonthlyReport(month, year);
+  const income = useIncomeReport(month, year);
+  return { monthly, income };
 }
