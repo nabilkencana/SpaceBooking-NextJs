@@ -398,20 +398,12 @@ export default function AuthPortal({ initialMode = "login" }: AuthPortalProps) {
 
                   {/* Kata Sandi */}
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label
-                        htmlFor="login-password"
-                        className="text-[11px] font-bold text-gray-600 uppercase tracking-wider"
-                      >
-                        KATA SANDI *
-                      </label>
-                      <Link
-                        href="/forgot-password"
-                        className="text-xs font-semibold text-gray-500 hover:text-brand-purple transition-colors"
-                      >
-                        Lupa sandi?
-                      </Link>
-                    </div>
+                    <label
+                      htmlFor="login-password"
+                      className="text-[11px] font-bold text-gray-600 uppercase tracking-wider block mb-1.5"
+                    >
+                      KATA SANDI *
+                    </label>
                     <div className="relative rounded-xl border border-gray-200 focus-within:border-brand-purple focus-within:ring-2 focus-within:ring-brand-purple/20 transition-all bg-white">
                       <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input

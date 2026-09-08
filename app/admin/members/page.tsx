@@ -94,7 +94,7 @@ export default function AdminMembersDirectoryPage() {
   }, [searchInput]);
 
   const membersQuery = useAdminMembers(searchQuery.trim() || undefined);
-  const members = (membersQuery.data ?? []) as MemberRow[];
+  const members = useMemo(() => (membersQuery.data ?? []) as MemberRow[], [membersQuery.data]);
 
   // Mutasi CRUD
   const createMember = useCreateMember();
@@ -133,7 +133,8 @@ export default function AdminMembersDirectoryPage() {
     const orgs = new Set(members.map((m) => m.instansi.trim()));
     return orgs.size;
   }, [members]);
-  const now = new Date();
+  // Referensi waktu stabil per-mount (bukan per-render) untuk "member baru bulan ini"
+  const now = useMemo(() => new Date(), []);
   const newMembersThisMonthCount = useMemo(
     () =>
       members.filter((m) => {
@@ -144,21 +145,20 @@ export default function AdminMembersDirectoryPage() {
           d.getFullYear() === now.getFullYear()
         );
       }).length,
-    [members],
+    [members, now],
   );
 
   // ─── PAGINATION LOGIC (server belum mempage endpoint members) ───────────────
   const totalPages = Math.ceil(members.length / ITEMS_PER_PAGE) || 1;
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  // Clamp derived (bukan effect): react.dev "You Might Not Need an Effect"
+  const safePage = Math.min(currentPage, totalPages);
   const paginatedMembers = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
     return members.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [members, currentPage]);
+  }, [members, safePage]);
 
-  const startIndexDisplay = members.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
-  const endIndexDisplay = Math.min(currentPage * ITEMS_PER_PAGE, members.length);
+  const startIndexDisplay = members.length === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1;
+  const endIndexDisplay = Math.min(safePage * ITEMS_PER_PAGE, members.length);
 
   // ─── HANDLERS ────────────────────────────────────────────────────────────────
   const handleAddMember = (e: React.FormEvent) => {
@@ -710,10 +710,10 @@ export default function AdminMembersDirectoryPage() {
               {/* Tombol Sebelumnya */}
               <button
                 type="button"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                onClick={() => setCurrentPage(Math.max(1, safePage - 1))}
                 className={`text-xs font-medium px-2 py-1 transition-colors ${
-                  currentPage === 1
+                  safePage === 1
                     ? "text-gray-300 cursor-not-allowed"
                     : "text-gray-600 hover:text-black cursor-pointer"
                 }`}
@@ -728,7 +728,7 @@ export default function AdminMembersDirectoryPage() {
                   type="button"
                   onClick={() => setCurrentPage(pageNum)}
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
-                    currentPage === pageNum
+                    safePage === pageNum
                       ? "bg-[#111827] text-white shadow-xs"
                       : "text-gray-700 hover:bg-gray-100"
                   }`}
@@ -740,10 +740,10 @@ export default function AdminMembersDirectoryPage() {
               {/* Tombol Berikutnya */}
               <button
                 type="button"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                onClick={() => setCurrentPage(Math.min(totalPages, safePage + 1))}
                 className={`text-xs font-semibold ml-2 transition-colors ${
-                  currentPage === totalPages
+                  safePage === totalPages
                     ? "text-gray-300 cursor-not-allowed"
                     : "text-[#111827] hover:text-black cursor-pointer"
                 }`}

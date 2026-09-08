@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -9,11 +10,8 @@ if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
 }
 
-interface HeroSectionProps {
-  onLocationChange?: (loc: string) => void;
-}
-
-export function HeroSection({ onLocationChange }: HeroSectionProps) {
+export function HeroSection() {
+  const router = useRouter();
   const [selectedLocation, setSelectedLocation] = useState("Bali, Indonesia");
 
   // DOM Refs
@@ -86,7 +84,7 @@ export function HeroSection({ onLocationChange }: HeroSectionProps) {
   const handleLocationSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setSelectedLocation(val);
-    onLocationChange?.(val);
+    router.push(`/spaces?search=${encodeURIComponent(val)}`);
   };
 
   // Ensure video plays smoothly across all browsers

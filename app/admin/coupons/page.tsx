@@ -127,7 +127,7 @@ export default function AdminCouponsPage() {
 
   // ─── DATA LIVE: GET /admin/diskon ────────────────────────────────────────────
   const diskonQuery = useAdminDiskon();
-  const coupons = diskonQuery.data ?? [];
+  const coupons = useMemo(() => diskonQuery.data ?? [], [diskonQuery.data]);
 
   const createDiskon = useCreateDiskon();
   const updateDiskon = useUpdateDiskon();

@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import AutoLayoutSpaceCard, { SpaceData } from '@/components/ui/auto-layout-space-card';
+import { useSpacesQuery } from '@/hooks/useSpaces';
+import type { Space } from '@/types';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -10,79 +12,43 @@ if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
 }
 
-const availableSpacesData: SpaceData[] = [
-  {
-    id: 1,
-    nama: 'Personal Desk - Quiet Pod 01',
-    tipe: 'desk',
-    lokasi: 'Moklet Hub • Lantai 2 (Silentium Zone)',
-    hargaPerJam: 20000,
-    kapasitas: '1 Orang',
-    wifiSpeed: '100 Mbps',
+function mapSpaceToCardData(space: Space): SpaceData {
+  return {
+    id: space.id,
+    nama: space.nama_space,
+    tipe: space.tipe,
+    lokasi:
+      [space.owner?.nama_coworking, space.zona_lantai].filter(Boolean).join(' • ') ||
+      space.badge ||
+      'Lokasi Moklet Hub',
+    hargaPerJam: space.harga_per_jam,
+    kapasitas: `${space.kapasitas} Orang`,
+    wifiSpeed: space.wifi_speed ? `${space.wifi_speed} Mbps` : 'WiFi Tersedia',
     coverImage:
-      'https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?auto=format&fit=crop&w=800&q=80',
-    galleryImages: [
-      'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=400&q=80',
-    ],
-    fasilitas: ['Stopkontak Mandiri', 'Kursi Ergonomis', 'Monitor Eksternal 24"'],
-  },
-  {
-    id: 2,
-    nama: 'Meeting Room Alpha',
-    tipe: 'meeting_room',
-    lokasi: 'Moklet Hub • Lantai 3 (Collaboration Wing)',
-    hargaPerJam: 100000,
-    kapasitas: '8 Orang',
-    wifiSpeed: '200 Mbps',
-    coverImage:
-      'https://images.unsplash.com/photo-1517502884422-41eaead166d4?auto=format&fit=crop&w=800&q=80',
-    galleryImages: [
-      'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1497215842964-222b430dc094?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1517502884422-41eaead166d4?auto=format&fit=crop&w=400&q=80',
-    ],
-    fasilitas: ['Smart TV 55"', 'Whiteboard Kaca', 'Soundbar Konferensi'],
-  },
-  {
-    id: 3,
-    nama: 'Private Glass Suite 4B',
-    tipe: 'private_office',
-    lokasi: 'Moklet Hub • Lantai 2 (East Wing)',
-    hargaPerJam: 150000,
-    kapasitas: '4 Orang',
-    wifiSpeed: '150 Mbps',
-    coverImage:
+      space.foto_url ??
+      space.foto ??
       'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=800&q=80',
     galleryImages: [
-      'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1497215842964-222b430dc094?auto=format&fit=crop&w=400&q=80',
-    ],
-    fasilitas: ['Kunci Akses Pintar', 'Standing Desk Elektrik', 'Meja Rapat Mini'],
-  },
-  {
-    id: 4,
-    nama: 'Personal Desk - Window View 04',
-    tipe: 'desk',
-    lokasi: 'Moklet Hub • Lantai 1 (Garden Terrace)',
-    hargaPerJam: 25000,
-    kapasitas: '1 Orang',
-    wifiSpeed: '100 Mbps',
-    coverImage:
-      'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=800&q=80',
-    galleryImages: [
-      'https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1517502884422-41eaead166d4?auto=format&fit=crop&w=400&q=80',
-    ],
-    fasilitas: ['Pencahayaan Alami', 'Stopkontak Ganda', 'Aroma Diffuser'],
-  },
-];
+      space.photos?.[0] ?? space.foto_url ?? space.foto,
+      space.photos?.[1] ?? space.foto_url ?? space.foto,
+      space.photos?.[2] ?? space.foto_url ?? space.foto,
+    ].map((img) => img ?? 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=400&q=80') as [string, string, string],
+    fasilitas: (space.amenities ?? []).filter(
+      (item): item is string => typeof item === 'string' && item.length > 0,
+    ),
+    slug: space.slug ?? undefined,
+  };
+}
 
 export function AvailableSpacesSection() {
   const sectionRef = useRef<HTMLElement>(null);
+
+  // Live katalog: 4 space terbaru untuk grid 2x2 (menggantikan data statis)
+  const spacesQuery = useSpacesQuery({ per_page: 4 });
+  const availableSpacesData = useMemo(
+    () => (spacesQuery.data?.items ?? []).slice(0, 4).map(mapSpaceToCardData),
+    [spacesQuery.data],
+  );
 
   useEffect(() => {
     const el = sectionRef.current;

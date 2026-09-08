@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,24 +9,17 @@ import {
   CalendarCheck,
   Check,
   Clock,
-  DoorOpen,
   Eye,
-  Globe,
   Layers,
   LayoutGrid,
   Loader2,
-  LogOut,
   MapPin,
   Menu,
-  Phone,
-  RotateCcw,
   Save,
   Settings,
-  Store,
   Tag,
   Users,
   X,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -119,6 +112,15 @@ export default function AdminLocationSettingsPage() {
   const router = useRouter();
   const { user, logout } = useAuth();
 
+  const {
+    data: profile,
+    isLoading: isProfileLoading,
+    isError: isProfileError,
+    refetch: refetchProfile,
+  } = useLocationProfile();
+  const updateLocationProfile = useUpdateLocationProfile();
+  const isSaving = updateLocationProfile.isPending;
+
   // Form states
   const [formData, setFormData] = useState<LocationFormData>({
     nama_coworking: "",
@@ -133,19 +135,14 @@ export default function AdminLocationSettingsPage() {
   });
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
   const [lastUpdatedDisplay, setLastUpdatedDisplay] = useState("—");
+  const [lastSyncedProfile, setLastSyncedProfile] = useState(profile);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  const {
-    data: profile,
-    isLoading: isProfileLoading,
-    isError: isProfileError,
-    refetch: refetchProfile,
-  } = useLocationProfile();
-  const updateLocationProfile = useUpdateLocationProfile();
-  const isSaving = updateLocationProfile.isPending;
-
-  useEffect(() => {
-    if (!profile) return;
+  // Hidrasi form via render-sync (bukan effect): react.dev
+  // "Storing information from previous renders" — remount aman, refetch
+  // dengan data identik tidak me-reset editan user (structural sharing).
+  if (profile && profile !== lastSyncedProfile) {
+    setLastSyncedProfile(profile);
     setFormData({
       nama_coworking: profile.nama_coworking,
       nama_pemilik: profile.nama_pemilik,
@@ -158,7 +155,7 @@ export default function AdminLocationSettingsPage() {
       is_public: profile.is_public,
     });
     setLastUpdatedDisplay(formatUpdatedAt(profile.updated_at));
-  }, [profile]);
+  }
 
   // Identitas Admin
   const adminName =

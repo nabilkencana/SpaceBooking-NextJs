@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { usePendingCount } from "@/hooks/useAdmin";
+import { toast } from "sonner";
 import {
   BarChart3,
   Bell,
@@ -16,7 +17,6 @@ import {
   LogOut,
   Menu,
   QrCode,
-  UserCheck,
   X,
 } from "lucide-react";
 
@@ -115,12 +115,6 @@ export function GlobalHeader({ isLoggedIn }: GlobalHeaderProps = {}) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Close mobile drawer on route change
-  useEffect(() => {
-    setMobileMenuOpen(false);
-    setProfileDropdownOpen(false);
-  }, [pathname]);
-
   const isUserAuthenticated = isLoggedIn ? true : isAuthenticated;
   const isAdminSpace = user?.role === "admin_space";
 
@@ -193,6 +187,14 @@ export function GlobalHeader({ isLoggedIn }: GlobalHeaderProps = {}) {
     }
   };
 
+  const handleNotificationClick = () => {
+    if (isAdminSpace) {
+      toast.info("Anda memiliki reservasi yang menunggu konfirmasi");
+    } else {
+      router.push("/reservations");
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     setProfileDropdownOpen(false);
@@ -254,6 +256,7 @@ export function GlobalHeader({ isLoggedIn }: GlobalHeaderProps = {}) {
               <button
                 type="button"
                 aria-label="Pemberitahuan"
+                onClick={handleNotificationClick}
                 className="p-2 text-[#4B5563] hover:text-brand-dark relative transition-colors rounded-full hover:bg-gray-50 cursor-pointer"
               >
                 <Bell className="w-5 h-5" />

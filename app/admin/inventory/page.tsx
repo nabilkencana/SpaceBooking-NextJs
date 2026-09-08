@@ -28,7 +28,6 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  adminKeys,
   useAdminSpaces,
   useCreateSpace,
   useDeleteSpace,
@@ -736,7 +735,6 @@ export default function AdminInventoryPage() {
                         <div className="flex items-center gap-3.5">
                           <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 border border-gray-100 shrink-0 relative">
                             {item.photos?.[0] || item.foto_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={(item.photos?.[0] ?? item.foto_url) as string}
                                 alt={item.nama_space}
@@ -1130,7 +1128,6 @@ export default function AdminInventoryPage() {
                       key={`${photo}-${index}`}
                       className="relative w-14 h-14 rounded-lg overflow-hidden border border-gray-200 group"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={photo}
                         alt={`Foto ${index + 1}`}

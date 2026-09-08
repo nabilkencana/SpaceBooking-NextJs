@@ -4,10 +4,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { usePublicLocation } from "@/hooks/useAdmin";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
 }
+
+const CONSULTATION_WA_NUMBER = "6281298765432";
 
 export function CommunityConsultationCurtain() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -23,6 +26,8 @@ export function CommunityConsultationCurtain() {
     anggota: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: locationProfile } = usePublicLocation();
 
   useEffect(() => {
     const orange = orangeSectionRef.current;
@@ -64,20 +69,35 @@ export function CommunityConsultationCurtain() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      toast.success("Permintaan konsultasi Anda berhasil dikirim!", {
-        description: "Tim konsultan Urspace akan segera menghubungi Anda.",
-      });
-      setFormData({
-        nama: "",
-        email: "",
-        perusahaan: "",
-        telepon: "",
-        lokasi: "",
-        anggota: "",
-      });
-    }, 500);
+    const hotline =
+      locationProfile?.hotline ?? locationProfile?.telp ?? CONSULTATION_WA_NUMBER;
+    const digits = hotline.replace(/\D/g, "").replace(/^0/, "62");
+    const waNumber = digits.startsWith("62") ? digits : CONSULTATION_WA_NUMBER;
+    const text = [
+      `Halo, saya ${formData.nama} dari ${formData.perusahaan || "-"}.`,
+      `Email: ${formData.email}`,
+      `Telepon: ${formData.telepon || "-"}`,
+      `Pilihan lokasi: ${formData.lokasi || "-"}`,
+      `Jumlah anggota tim: ${formData.anggota || "-"}`,
+    ].join("\n");
+
+    window.open(
+      `https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`,
+      "_blank"
+    );
+    toast.success("Membuka WhatsApp...", {
+      description: "Tim konsultan Urspace akan segera menghubungi Anda.",
+    });
+
+    setFormData({
+      nama: "",
+      email: "",
+      perusahaan: "",
+      telepon: "",
+      lokasi: "",
+      anggota: "",
+    });
+    setIsSubmitting(false);
   };
 
   return (
