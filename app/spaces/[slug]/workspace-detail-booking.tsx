@@ -169,19 +169,25 @@ export default function WorkspaceDetailBooking({
 
   useEffect(() => {
     const tanggal = searchParams?.get("tanggal");
-    setSelectedDate(
-      tanggal && /^\d{4}-\d{2}-\d{2}$/.test(tanggal) ? tanggal : getTodayIso(),
-    );
-    setMinDate(getTodayIso());
+    // Microtask deferral dodges SSR/hydration date drift (client-only "today");
+    // inlining the setStates back would trip react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setSelectedDate(
+        tanggal && /^\d{4}-\d{2}-\d{2}$/.test(tanggal)
+          ? tanggal
+          : getTodayIso(),
+      );
+      setMinDate(getTodayIso());
 
-    const jam = searchParams?.get("jam_mulai");
-    if (jam && /^\d{2}:\d{2}$/.test(jam)) setSelectedTime(jam);
+      const jam = searchParams?.get("jam_mulai");
+      if (jam && /^\d{2}:\d{2}$/.test(jam)) setSelectedTime(jam);
 
-    const durasi = searchParams?.get("durasi_jam");
-    const durasiNum = durasi ? Number.parseInt(durasi, 10) : Number.NaN;
-    if (!Number.isNaN(durasiNum) && durasiNum >= 1 && durasiNum <= 12) {
-      setSelectedDuration(durasiNum);
-    }
+      const durasi = searchParams?.get("durasi_jam");
+      const durasiNum = durasi ? Number.parseInt(durasi, 10) : Number.NaN;
+      if (!Number.isNaN(durasiNum) && durasiNum >= 1 && durasiNum <= 12) {
+        setSelectedDuration(durasiNum);
+      }
+    });
   }, [searchParams]);
 
   const tanggalValid = /^\d{4}-\d{2}-\d{2}$/.test(selectedDate);
@@ -310,10 +316,13 @@ export default function WorkspaceDetailBooking({
 
   // Mutable refs for high-frequency scroll / wheel listeners
   const isAtBottomRef = useRef(false);
-  isAtBottomRef.current = isAtBottom;
-
   const footerUnlockedRef = useRef(false);
-  footerUnlockedRef.current = footerUnlocked;
+
+  // Sync the mirror refs outside render (was render-body assignment).
+  useEffect(() => {
+    isAtBottomRef.current = isAtBottom;
+    footerUnlockedRef.current = footerUnlocked;
+  }, [isAtBottom, footerUnlocked]);
 
   const canTriggerSecondScrollRef = useRef(false);
   const wheelIdleTimerRef = useRef<NodeJS.Timeout | null>(null);

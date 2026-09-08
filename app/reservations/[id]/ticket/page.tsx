@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -182,6 +183,7 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const ticketId = resolvedParams.id;
   const numericId = Number(ticketId);
+  const router = useRouter();
 
   // Halaman privat member — redirect ke /login saat belum terautentikasi.
   const { isAuthenticated, isLoading: authLoading } = useRequireAuth("/login");
@@ -196,9 +198,9 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
       eTicketQuery.error instanceof ApiRequestError &&
       eTicketQuery.error.statusCode === 401
     ) {
-      window.location.assign("/login");
+      router.push("/login");
     }
-  }, [isAuthenticated, eTicketQuery.error]);
+  }, [isAuthenticated, eTicketQuery.error, router]);
 
   const ticket = eTicketQuery.data;
   const location = locationQuery.data;
@@ -221,10 +223,7 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
 
   // Mutable refs for high-frequency scroll / wheel listeners
   const isAtBottomRef = useRef(false);
-  isAtBottomRef.current = isAtBottom;
-
   const footerUnlockedRef = useRef(false);
-  footerUnlockedRef.current = footerUnlocked;
 
   const canTriggerSecondScrollRef = useRef(false);
   const wheelIdleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -237,6 +236,11 @@ export default function WorkspaceTicketPage({ params }: PageProps) {
     const ticketBottom = scrollY + rect.bottom;
     return Math.max(0, ticketBottom - window.innerHeight);
   };
+
+  useEffect(() => {
+    isAtBottomRef.current = isAtBottom;
+    footerUnlockedRef.current = footerUnlocked;
+  }, [isAtBottom, footerUnlocked]);
 
   // ─── TWO-STAGE SMOOTH SCROLL (TERTAHAN DULU DI TIKET, SCROLL KEDUA BARU KE FOOTER) ───
   useEffect(() => {

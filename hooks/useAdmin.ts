@@ -298,8 +298,7 @@ export interface CreateSpacePayload {
   photos?: string[];
 }
 
-export interface UpdateSpacePayload
-  extends Partial<CreateSpacePayload> {}
+export type UpdateSpacePayload = Partial<CreateSpacePayload>;
 
 export function useAdminSpaces() {
   return useQuery({
@@ -394,8 +393,7 @@ export interface CreateDiskonPayload {
   is_aktif?: boolean;
 }
 
-export interface UpdateDiskonPayload
-  extends Partial<CreateDiskonPayload> {}
+export type UpdateDiskonPayload = Partial<CreateDiskonPayload>;
 
 export function useAdminDiskon() {
   return useQuery({

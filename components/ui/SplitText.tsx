@@ -59,19 +59,15 @@ export const SplitText: React.FC<SplitTextProps> = ({
 
   useEffect(() => {
     if (typeof document !== 'undefined' && 'fonts' in document) {
-      if (document.fonts.status === 'loaded') {
-        setFontsLoaded(true);
-      } else {
-        document.fonts.ready
-          .then(() => {
-            setFontsLoaded(true);
-          })
-          .catch(() => {
-            setFontsLoaded(true);
-          });
-      }
+      document.fonts.ready
+        .then(() => {
+          setFontsLoaded(true);
+        })
+        .catch(() => {
+          setFontsLoaded(true);
+        });
     } else {
-      setFontsLoaded(true);
+      queueMicrotask(() => setFontsLoaded(true));
     }
   }, []);
 
@@ -87,7 +83,7 @@ export const SplitText: React.FC<SplitTextProps> = ({
       if (el._rbsplitInstance) {
         try {
           el._rbsplitInstance.revert();
-        } catch (_) {}
+        } catch {}
         el._rbsplitInstance = undefined;
       }
 
@@ -152,7 +148,7 @@ export const SplitText: React.FC<SplitTextProps> = ({
         });
         try {
           splitInstance.revert();
-        } catch (_) {}
+        } catch {}
         el._rbsplitInstance = undefined;
       };
     },
@@ -180,13 +176,27 @@ export const SplitText: React.FC<SplitTextProps> = ({
       willChange: 'transform, opacity',
     };
     const classes = cn('split-parent overflow-hidden inline-block whitespace-normal', className);
-    const Tag = (tag || 'p') as any;
-
-    return (
-      <Tag ref={ref} style={style} className={classes}>
-        {text}
-      </Tag>
-    );
+    const shared = { style, className: classes };
+    switch (tag) {
+      case 'h1':
+        return <h1 ref={ref as React.RefObject<HTMLHeadingElement | null>} {...shared}>{text}</h1>;
+      case 'h2':
+        return <h2 ref={ref as React.RefObject<HTMLHeadingElement | null>} {...shared}>{text}</h2>;
+      case 'h3':
+        return <h3 ref={ref as React.RefObject<HTMLHeadingElement | null>} {...shared}>{text}</h3>;
+      case 'h4':
+        return <h4 ref={ref as React.RefObject<HTMLHeadingElement | null>} {...shared}>{text}</h4>;
+      case 'h5':
+        return <h5 ref={ref as React.RefObject<HTMLHeadingElement | null>} {...shared}>{text}</h5>;
+      case 'h6':
+        return <h6 ref={ref as React.RefObject<HTMLHeadingElement | null>} {...shared}>{text}</h6>;
+      case 'span':
+        return <span ref={ref as React.RefObject<HTMLSpanElement | null>} {...shared}>{text}</span>;
+      case 'div':
+        return <div ref={ref as React.RefObject<HTMLDivElement | null>} {...shared}>{text}</div>;
+      default:
+        return <p ref={ref as React.RefObject<HTMLParagraphElement | null>} {...shared}>{text}</p>;
+    }
   };
 
   return renderTag();

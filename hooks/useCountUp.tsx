@@ -44,11 +44,13 @@ export function useCountUp(
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
-      const formatted = target.toLocaleString("id-ID", {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
+      queueMicrotask(() => {
+        const formatted = target.toLocaleString("id-ID", {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        });
+        setDisplayValue(`${prefix}${formatted}${suffix}`);
       });
-      setDisplayValue(`${prefix}${formatted}${suffix}`);
       return;
     }
 

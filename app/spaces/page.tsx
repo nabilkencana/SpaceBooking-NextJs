@@ -65,10 +65,7 @@ export default function SpacesDirectoryPage() {
 
   // Mutable refs for high-frequency scroll / wheel listeners
   const isAtBottomRef = useRef(false);
-  isAtBottomRef.current = isAtBottom;
-
   const footerUnlockedRef = useRef(false);
-  footerUnlockedRef.current = footerUnlocked;
 
   const canTriggerSecondScrollRef = useRef(false);
   const wheelIdleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -80,8 +77,13 @@ export default function SpacesDirectoryPage() {
   }, [searchInput]);
 
   // Reset ke halaman 1 saat filter berubah
+  const prevFiltersRef = useRef({ search: "", type: "" });
   useEffect(() => {
-    setCurrentPage(1);
+    const prev = prevFiltersRef.current;
+    if (prev.search !== debouncedSearch || prev.type !== selectedType) {
+      prevFiltersRef.current = { search: debouncedSearch, type: selectedType };
+      setCurrentPage(1);
+    }
   }, [debouncedSearch, selectedType]);
 
   // Daftar tipe space dari GET /spaces/types (diambil sekali; fallback statis saat gagal)
@@ -108,7 +110,7 @@ export default function SpacesDirectoryPage() {
     per_page: 6,
   });
   const { data: spacesData, isPending, isError, refetch } = spacesQuery;
-  const items = spacesData?.items ?? [];
+  const items = useMemo(() => spacesData?.items ?? [], [spacesData]);
   const meta = spacesData?.meta;
 
   const sortedItems = useMemo(() => {

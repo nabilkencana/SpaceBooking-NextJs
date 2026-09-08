@@ -53,19 +53,22 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: any;
+  let body: unknown;
   try {
     body = await res.json();
   } catch {
     body = {};
   }
+  const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === "object" && v !== null;
+  const statusCode = isRecord(body) && typeof body.statusCode === "number" ? body.statusCode : 0;
 
   // Propagate backend errors without setting any cookie.
-  if (!res.ok || body?.status === false || body?.statusCode >= 400) {
+  if (!res.ok || (isRecord(body) && body.status === false) || statusCode >= 400) {
     return NextResponse.json(body, { status: res.status });
   }
 
-  const data = body?.data;
+  const data = isRecord(body) && isRecord(body.data) ? body.data : undefined;
   const accessToken = data?.access_token;
   const role = data?.role as Role | undefined;
 
@@ -104,8 +107,8 @@ export async function POST(req: Request) {
   }
 
   // Return the user object WITHOUT the access token for safety.
-  const safeData = { ...data } as Record<string, unknown>;
+  const safeData = { ...(data ?? {}) } as Record<string, unknown>;
   delete safeData.access_token;
 
-  return NextResponse.json({ ...body, data: safeData });
+  return NextResponse.json({ ...(isRecord(body) ? body : {}), data: safeData });
 }

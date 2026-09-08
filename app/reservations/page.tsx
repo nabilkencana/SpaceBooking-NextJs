@@ -163,10 +163,7 @@ function MemberReservationsDashboardContent() {
 
   // Mutable refs for high-frequency scroll / wheel listeners
   const isAtBottomRef = useRef(false);
-  isAtBottomRef.current = isAtBottom;
-
   const footerUnlockedRef = useRef(false);
-  footerUnlockedRef.current = footerUnlocked;
 
   const canTriggerSecondScrollRef = useRef(false);
   const wheelIdleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -182,6 +179,11 @@ function MemberReservationsDashboardContent() {
     const contentBottom = scrollY + rect.bottom;
     return Math.max(0, contentBottom - window.innerHeight);
   };
+
+  useEffect(() => {
+    isAtBottomRef.current = isAtBottom;
+    footerUnlockedRef.current = footerUnlocked;
+  }, [isAtBottom, footerUnlocked]);
 
   // ─── TWO-STAGE SMOOTH SCROLL (TERTAHAN DULU DI PAGE RESERVASI, SCROLL KEDUA BARU KE FOOTER) ───
   useEffect(() => {
