@@ -31,6 +31,7 @@ import {
   useAdminDiskon,
   useCreateDiskon,
   useDeleteDiskon,
+  usePendingCount,
   useToggleDiskon,
   useUpdateDiskon,
 } from "@/hooks/useAdmin";
@@ -128,6 +129,7 @@ export default function AdminCouponsPage() {
   // ─── DATA LIVE: GET /admin/diskon ────────────────────────────────────────────
   const diskonQuery = useAdminDiskon();
   const coupons = useMemo(() => diskonQuery.data ?? [], [diskonQuery.data]);
+  const pendingCount = usePendingCount();
 
   const createDiskon = useCreateDiskon();
   const updateDiskon = useUpdateDiskon();
@@ -452,9 +454,11 @@ export default function AdminCouponsPage() {
               <CalendarCheck className="w-4 h-4 text-gray-400" />
               <span>Operasional Reservasi</span>
             </div>
-            <span className="bg-[#FFD500] text-[#111827] font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0">
-              3
-            </span>
+            {(pendingCount.data ?? 0) > 0 && (
+              <span className="bg-[#FFD500] text-[#111827] font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0">
+                {pendingCount.data}
+              </span>
+            )}
           </Link>
 
           {/* 3. Inventaris Space & Meja */}

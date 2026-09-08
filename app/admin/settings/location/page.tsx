@@ -30,6 +30,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import {
   useLocationProfile,
+  usePendingCount,
   useUpdateLocationProfile,
 } from "@/hooks/useAdmin";
 import AdminPageTransition from "@/components/admin/AdminPageTransition";
@@ -119,6 +120,7 @@ export default function AdminLocationSettingsPage() {
     refetch: refetchProfile,
   } = useLocationProfile();
   const updateLocationProfile = useUpdateLocationProfile();
+  const pendingCount = usePendingCount();
   const isSaving = updateLocationProfile.isPending;
 
   // Form states
@@ -305,9 +307,11 @@ export default function AdminLocationSettingsPage() {
               <CalendarCheck className="w-4 h-4 text-gray-400" />
               <span>Operasional Reservasi</span>
             </div>
-            <span className="bg-[#FFD500] text-[#111827] font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0">
-              3
-            </span>
+            {(pendingCount.data ?? 0) > 0 && (
+              <span className="bg-[#FFD500] text-[#111827] font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shrink-0">
+                {pendingCount.data}
+              </span>
+            )}
           </Link>
 
           {/* 3. Inventaris Space & Meja */}
