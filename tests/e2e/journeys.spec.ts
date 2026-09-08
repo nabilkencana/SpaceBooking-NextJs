@@ -13,10 +13,11 @@ import {
  * J2 admin turnstile (approve → verify-qr check-in → check-out)
  * J3 admin management (create coupon → check endpoint → location update → footer)
  *
- * Clock-domain contract: the backend runs UTC (config/app.php) while the test
- * browser runs local time. The verify-qr endpoint compares against the BACKEND
- * "today" and the BACKEND now, so the booking date + slot are derived from the
- * backend clock (health envelope timestamp), never from the browser clock.
+ * Clock-domain contract: the backend runs Asia/Jakarta (config/app.php)
+ * while the test browser runs local time. The verify-qr endpoint compares
+ * against the BACKEND "today" and the BACKEND wall-clock now, so the booking
+ * date + slot are derived from the backend wall clock (health envelope
+ * timestamp), never from the browser clock.
  *
  * J2 consumes J1's qr_payload and J2/J3 reuse their session via storageState —
  * safe because the config pins workers: 1 (strict serial file order).
@@ -37,6 +38,14 @@ function isoDateUtc(d: Date): string {
   ).padStart(2, "0")}`;
 }
 
+const dayMs = 86_400_000;
+
+/** Calendar date `offsetDays` from a wall date string (fixed-offset clock = DST-free). */
+function wallDatePlus(tanggal: string, offsetDays: number): string {
+  const [y, mo, d] = tanggal.split("-").map(Number);
+  return isoDateUtc(new Date(Date.UTC(y, mo - 1, d) + offsetDays * dayMs));
+}
+
 const MONTHS_ID = [
   "Januari",
   "Februari",
@@ -52,41 +61,59 @@ const MONTHS_ID = [
   "Desember",
 ];
 
-/** Backend clock (any response envelope `timestamp`, UTC-aware ISO string). */
-async function backendNow(request: APIRequestContext): Promise<Date> {
+/** Backend wall clock (its own offset, Asia/Jakarta) parsed from the raw envelope timestamp. */
+type BackendWallClock = {
+  raw: string;
+  tanggal: string;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+async function backendWallNow(
+  request: APIRequestContext,
+): Promise<BackendWallClock> {
   const res = await request.get("/api/health");
   if (!res.ok()) throw new Error(`GET /api/health failed: ${res.status()}`);
   const body = await res.json();
-  const ts = new Date(body.timestamp);
-  if (Number.isNaN(ts.getTime())) {
-    throw new Error(`Bad backend timestamp: ${body.timestamp}`);
-  }
-  return ts;
+  const raw = String(body.timestamp);
+  // A JS Date cannot carry a foreign wall clock (the offset is normalized
+  // away), so the Y/M/D H:M:S components come straight from the raw string.
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+  if (!m) throw new Error(`Bad backend timestamp: ${raw}`);
+  return {
+    raw,
+    tanggal: `${m[1]}-${m[2]}-${m[3]}`,
+    hour: Number(m[4]),
+    minute: Number(m[5]),
+    second: Number(m[6]),
+  };
 }
 
 /**
- * Booking slot candidates from the BACKEND clock: whole hours whose
+ * Booking slot candidates from the BACKEND wall clock: whole hours whose
  * verify-qr window (jam_mulai ±30min on the backend clock) contains now —
  * ceil(now+10min)-first (future-leaning), floor(now) as the retry fallback.
  * Widget offers :00 hours only, 08:00–20:00.
  */
-function backendSlotCandidates(now: Date): { tanggal: string; jam: string }[] {
-  const msOfDay = now.getTime() % 86_400_000;
-  const ceilHour = new Date(now.getTime() + 10 * 60 * 1000);
-  ceilHour.setUTCMinutes(0, 0, 0);
-  if (ceilHour.getTime() < now.getTime() + 10 * 60 * 1000) {
-    ceilHour.setUTCHours(ceilHour.getUTCHours() + 1);
-  }
-  const hours = [...new Set([ceilHour.getUTCHours(), now.getUTCHours()])]
+function backendSlotCandidates(
+  w: BackendWallClock,
+): { tanggal: string; jam: string }[] {
+  const secondsOfDay = w.hour * 3600 + w.minute * 60 + w.second;
+  const msOfDay = secondsOfDay * 1000;
+  const ceilH = Math.ceil((secondsOfDay + 600) / 3600) % 24;
+  const hours = [...new Set([ceilH, w.hour])]
     .filter((h) => h >= 8 && h <= 20)
     .filter((h) => Math.abs(h * 3_600_000 - msOfDay) <= 30 * 60_000);
   if (hours.length === 0) {
     throw new Error(
-      `No bookable hour within verify-qr's ±30min window (backend now ${now.toISOString()}); run the suite when the backend clock is between 07:30–20:30 UTC.`,
+      `No bookable hour within verify-qr's ±30min window (backend now ${w.raw}); run the suite when the backend wall clock is between 07:30–20:30.`,
     );
   }
-  const tanggal = isoDateUtc(now);
-  return hours.map((h) => ({ tanggal, jam: `${String(h).padStart(2, "0")}:00` }));
+  return hours.map((h) => ({
+    tanggal: w.tanggal,
+    jam: `${String(h).padStart(2, "0")}:00`,
+  }));
 }
 
 async function loginViaUi(page: Page, username: string, password: string) {
@@ -151,8 +178,8 @@ test.describe.serial("Urspace directive journeys", () => {
 
     // Booking widget: date + slot from the BACKEND clock (verify-qr contract),
     // 3h duration.
-    const now = await backendNow(request);
-    const slot = backendSlotCandidates(now)[0];
+    const backendWall = await backendWallNow(request);
+    const slot = backendSlotCandidates(backendWall)[0];
 
     const dateInput = page.locator('input[type="date"]');
     await expect(dateInput).toBeVisible({ timeout: 45_000 });
@@ -270,12 +297,15 @@ test.describe.serial("Urspace directive journeys", () => {
       .getByPlaceholder("Misal: Flash Sale Kolaborasi Q4")
       .fill("E2E Journey 3");
     await createForm.locator('input[type="number"]').first().fill("10");
-    // The form defaults dates to the BROWSER today; the backend clock (UTC)
-    // may lag it, which would make the fresh coupon inactive server-side.
-    const backendDate = await backendNow(request);
-    const windowEnd = new Date(backendDate.getTime() + 30 * 86_400_000);
-    await createForm.locator('input[type="date"]').nth(0).fill(isoDateUtc(backendDate));
-    await createForm.locator('input[type="date"]').nth(1).fill(isoDateUtc(windowEnd));
+    // The form defaults dates to the BROWSER today; the backend wall date
+    // (Asia/Jakarta) may differ from it, which would make the fresh coupon
+    // inactive server-side — anchor the window on the backend wall date.
+    const backendWall = await backendWallNow(request);
+    await createForm.locator('input[type="date"]').nth(0).fill(backendWall.tanggal);
+    await createForm
+      .locator('input[type="date"]')
+      .nth(1)
+      .fill(wallDatePlus(backendWall.tanggal, 30));
     await createForm.getByRole("button", { name: "Simpan Kupon Baru" }).click();
     await expect(page.getByText('Kupon "TESTE2E10" berhasil dibuat!')).toBeVisible();
     await expect(page.locator("td", { hasText: "TESTE2E10" }).first()).toBeVisible();
