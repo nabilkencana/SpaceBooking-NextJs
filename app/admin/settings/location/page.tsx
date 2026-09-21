@@ -150,8 +150,8 @@ export default function AdminLocationSettingsPage() {
       nama_pemilik: profile.nama_pemilik,
       telp: profile.telp,
       hotline: profile.hotline ?? "",
-      alamat: profile.alamat,
-      deskripsi: profile.deskripsi,
+      alamat: profile.alamat ?? "",
+      deskripsi: profile.deskripsi ?? "",
       latitude: profile.latitude ?? "",
       longitude: profile.longitude ?? "",
       is_public: profile.is_public,
@@ -174,7 +174,7 @@ export default function AdminLocationSettingsPage() {
     .toUpperCase();
 
   // Character count calculation
-  const charCount = formData.deskripsi.length;
+  const charCount = (formData.deskripsi ?? "").length;
   const maxChars = 500;
 
   // Handlers

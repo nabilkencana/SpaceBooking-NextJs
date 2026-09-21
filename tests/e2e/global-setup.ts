@@ -9,8 +9,8 @@ import path from "node:path";
  * so this reset never conflicts with backend tests.
  */
 export default function globalSetup(): void {
-  const backendDir = path.resolve(__dirname, "..", "..", "..", "paketb-backend");
-  execSync("php artisan migrate:fresh --seed", {
+  const backendDir = "/Users/nabilkencana/Documents/UKK Backend/coworking-space";
+  execSync("npx ts-node prisma/seed.ts", {
     cwd: backendDir,
     stdio: "inherit",
   });

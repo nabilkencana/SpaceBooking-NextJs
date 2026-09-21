@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 
 /** Base URL of the Laravel backend API. */
 export const BACKEND_URL =
-  process.env.BACKEND_API_URL || "http://localhost:8000/api";
+  process.env.BACKEND_API_URL || "http://localhost:4000/api";
 
 /** Name of the httpOnly cookie holding the Sanctum access token. */
 export const TOKEN_COOKIE = "sb_token";

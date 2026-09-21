@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 export const runtime = "nodejs";
 
 const BACKEND_URL =
-  process.env.BACKEND_API_URL || "http://localhost:8000/api";
+  process.env.BACKEND_API_URL || "http://localhost:4000/api";
 
 /**
  * Generic BFF proxy — catches every `/api/{...}` call from the client and
@@ -24,12 +24,14 @@ async function handler(
   const url = `${BACKEND_URL}/${joined}${query}`;
 
   const cookieStore = await cookies();
-  const token = cookieStore.get(TOKEN_COOKIE)?.value;
+  const cookieToken = cookieStore.get(TOKEN_COOKIE)?.value;
+  const incomingAuth = req.headers.get("authorization");
+  const authHeader = incomingAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
 
   // Build outgoing headers — preserve the incoming Content-Type for
   // multipart requests so the boundary is forwarded correctly.
   const headers = new Headers();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (authHeader) headers.set("Authorization", authHeader);
 
   const contentType = req.headers.get("content-type") ?? "";
 

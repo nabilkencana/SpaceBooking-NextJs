@@ -35,9 +35,9 @@ export default defineConfig({
   globalSetup: "./tests/e2e/global-setup.ts",
   webServer: [
     {
-      command: "php artisan serve --port=8000",
-      cwd: "../paketb-backend",
-      url: "http://127.0.0.1:8000/api/health",
+      command: "PORT=4000 node dist/src/main.js",
+      cwd: "/Users/nabilkencana/Documents/UKK Backend/coworking-space",
+      url: "http://127.0.0.1:4000/api/health",
       reuseExistingServer: true,
       timeout: 120_000,
     },
